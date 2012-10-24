@@ -1,0 +1,4 @@
+HaskellExercise
+===============
+
+studying Haskell
