@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html class="remark-container"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+    <title>Warm Fuzzy Monads</title>
+    <link rel="stylesheet" href="./style.css">
+    <script src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML&amp;delayStartupUntil=configured" type="text/javascript"></script>
+  </head>
+  <body class="remark-container">
+    <textarea id="source" style="display: none;">name: inverse
+class: inverse, center, middle, front-page
+layout: true
+---
+.large[.left[A Story of]]
+# Warm Fuzzy Monads
+[suhorng](https://github.com/suhorng)
+.footnote[Fun Thursday Meetup #8]
+---
+layout: false
+# So What Are Monads?
+- The very first question...
+
+.center[![broadroom suggestions](./what-is-monad.jpg)]
+---
+# So What Are Monads?
+.center[![broadroom suggestions](./what-is-monad2.jpg)]
+
+- Are not that easy :(
+---
+# The Trouble With Effects
+- When things are not sequentially evaluated:
+
+```scala
+var u = 0
+lazy val i = { println("evaluate i"); u = 1; 5 }
+lazy val j = { println("evaluate j"); u = 2; i + 1}
+println("hello i:" + i + "; u:" + u);
+
+var v = 0;
+lazy val p = { println("evaluate p"); v = 1; 5 }
+lazy val q = { println("evaluate q"); v = 2; p + 1 }
+println("hello p:" + p + "; q:" + q + "; v:" + v);
+
+var w = 0;
+lazy val x = { println("evaluate x"); w = 1; 5 }
+lazy val y = { println("evaluate y"); w = 2; x + 1 }
+println("hello y:" + y + "; w:" + w);
+```
+
+- Everything in **Haskell** is lazy*. How could we support side-effects in such settings?
+
+.footnote[* non-strict]
+---
+# Any Workaround?
+How can mutable state be emulated, without resorting to built-in support?
+---
+# State the Purely Functional Way
+- We can make a $``$mutable$"$ state explicit -- passing it through every function that might use it.
+
+- $``$Statement$"$ should take an old state $s$, returing some results and a new state $s'$.
+
+```ocaml
+(* function with an integer state *)
+(* val tick : int &rightarrow; unit * int = <fun> *)
+let tick = fun s &rightarrow; ((), s+1)
+(* val get_tick : 'a &rightarrow; 'a * 'a = <fun> *)
+let get_tick = fun s &rightarrow; (s, s)
+
+(* computation example *)
+(* val comp : int &rightarrow; int list = <fun> *)
+let comp s0 = let (_, s1) = tick s0 in
+              let (_, s2) = tick s1 in
+              let (x, s3) = get_tick s2 in
+              let (_, s4) = tick s3 in
+              let (y, s5) = get_tick s4 in
+              [x; y]
+```
+---
+# An Old Problem
+- Actions that might *fail*
+```cpp
+res = action1();
+if (not res)
+    return false;
+res = action2();
+if (not res)
+    return false;
+//...
+return true;
+```
+- Optional values that propagate
+```cpp
+optional<int> ans = calc();
+if (ans) {
+    optional<string> name = ask_name();
+    if (name) {
+      //...
+    }
+}
+return optional<...>();
+```
+---
+# Where Callbacks Are Nested
+- Chained event functions
+
+```javascript
+var socket_io = require('socket.io').listen(514);
+
+socket_io.on('connection', function (fd) {
+  fd.emit('hello', { label: 'datum' });
+  fd.on('world', function (data1) {
+    fd.emit('FIN', { need_ack: true });
+    fd.on('FIN', function (data2) {
+      console.log(data1, data2);
+    });
+  });
+});
+```
+
+- The example surely isn't in a good style.
+
+    (An obvious problem is that `.on` is an effectful method)
+---
+# Common Parts?
+- Things are wrapped in some contexts rather than simple values
+    * function of type $s \to a \times s$
+
+    * the datatype `optional<T>`
+
+    * $``$Event$"$ functions that invoke some other callback function, which should have types $a \to (b \to r) \to r$ for all $r$ and an argument of type $a$. The parameter of type $b\to r$ is the callback function.
+---
+# Common Parts?
+- We can $``$sequence$"$ them
+
+  ```ocaml
+  let sequence (f : 's &rightarrow; 'a * 's) (g : 's &rightarrow; 'b * 's) =
+    fun s0 &rightarrow; let (_, s1) = f s0 in g s1
+  ```
+
+  ```cpp
+  /* some result from previous computations */
+  if ( success ) { next computation... }
+  else { return optional<...>(); }
+  ```
+
+  ```javascript
+  // chaining two "event" functions into a new "event" function
+  function sequence_on(func_on1, func_on2) {
+    return function(callback) {
+      return func_on1(function(val) {
+        return func_on2(val, callback);
+      });
+    };
+  }
+  ```
+---
+# There We Are!
+We have a repeating pattern, that:
+
+- Has a wrapped $``$context$"$ $m$
+
+- We can throw values into it from outside
+
+- Actions in the context can be chained together
+
+We can use *monad*s as a model for effectful computations!
+
+---
+# The Beginning
+Moggi proposed monads from category theory as an model of computation.
+
+    * Computational &lambda;-Calculus and Monads
+    * Monads and Effects/Notions of Computation and Monads
+However, the concept is still not that accessible.
+.center[![monad](./monad-moggi2.png)&nbsp;![monad](./monad-moggi1.png)]
+---
+# What's the Problem?
+- It's pretty complex and take some time to grasp.
+
+> 1990 - A committee formed by Simon Peyton-Jones, Paul Hudak, Philip Wadler, Ashton Kutcher, and People for the Ethical Treatment of Animals creates Haskell, a pure, non-strict, functional language. 
+
+> Haskell gets some resistance due to the complexity of using monads to control side effects. Wadler tries to appease critics by explaining that **$``$a monad is a monoid in the category of endofunctors, what's the problem?$"$** -- [A Brief, Incomplete, and Mostly Wrong History of Programming Languages](http://james-iry.blogspot.tw/2009/05/brief-incomplete-and-mostly-wrong.html).
+---
+# Abstract Nonsense
+Seems that mathematicians have very different views of monads.
+
+> A monad is a endofunctor $T$ together with two natural transformations $\eta$, $\mu$ such that the following diagrams commute:
+
+> .center[![wiki-monad-mult](./Monad_mult.png)&nbsp;&nbsp;&nbsp;&nbsp;![wiki-monad-unit1](./Monad_unit1.png)]
+---
+# Abstract Nonsense Making Sense
+- Some context $m$ (we can regard it as some data type)
+- We can throw any value into the context:
+
+    `return` $: a \to m\; a$
+- We can $``$sequence$"$ two such things:
+
+    `(>>=)` $: m\; a \to (a \to m\; b) \to m\; b$
+- And several equations that we would naturally expect them to hold
+---
+# Abstract Nonsense Making Sense
+An example: the state monad
+
+- Context: function of type $s \to a\times s$. Let $m\;a:=s\to a\times s$.
+
+- Throwing an value into the context:
+
+```ocaml
+(* pure : a &rightarrow; m a *)
+let pure a = fun s &rightarrow; (a, s)
+```
+
+- Sequencing
+
+```ocaml
+(* bind : m a &rightarrow; (a &rightarrow; m b) &rightarrow; m b *)
+let bind m f = fun s0 &rightarrow;
+                let (a, s1) = m s0
+                in f a s1
+```
+---
+# Abstract Nonsense Making Sense
+- The context of type $m\,a$ can be think of a *computation* that produces a value of type $a$
+
+- The type $a \to m\,b$ indicates that we are taking a function from *values* to *computations*, and that the computation may depend on the value.
+
+- By flipping the order of the arguments of `(>>=)`, we get a function of type $(a \to m\,b) \to (m\,a \to m\,b)$. `(>>=)` **extends** a function from *values* to *computations* into a function from *computation* to *computation*.
+
+.footnote[Note: there is no way to escape from $m$; only injection is possible!]
+---
+# Back to Codes Again
+- The interface of monad in Haskell
+
+```haskell
+class Monad m where
+    return :: a &rightarrow; m a
+    (>>=) :: m a &rightarrow; (a &rightarrow; m b) &rightarrow; m b
+```
+--
+- So we can write some imperative codes!
+
+```haskell
+comp =    tick >>= (\_ &rightarrow;         --  let (_, s1) = tick s0 in
+          tick >>= (\_ &rightarrow;         --  let (_, s2) = tick s1 in
+          get_tick >>= (\x &rightarrow;     --  let (x, s3) = tick s2 in
+          tick >>= (\_ &rightarrow;         --  let (_, s4) = tick s3 in
+          get_tick >>= (\y &rightarrow;     --  let (y, s5) = tick s4 in
+          return [x,y])))))       --    ([x; y], s5)
+```
+--
+- Haskell has `do`-notation to relief the pain of writing monadic codes.
+---
+# Back to Codes Again
+- The interface of monad in Haskell
+
+```haskell
+class Monad m where
+    return :: a &rightarrow; m a
+    (>>=) :: m a &rightarrow; (a &rightarrow; m b) &rightarrow; m b
+```
+- So we can write some imperative codes!
+
+```haskell
+comp = do tick
+          tick
+          x &leftarrow; get_tick
+          tick
+          y &leftarrow; get_tick
+          return [x,y]
+```
+- Haskell has `do`-notation to relief the pain of writing monadic codes.
+---
+# We Have I/O in Haskell Now
+```haskell
+type IO a = World &rightarrow; IORes a
+data IORes a = MkIORes a World
+data IORes# a = MkIORes# Int World
+
+unitIO a w = MkIORes a w
+bindIO m k w = case (m w) of MKIORes a w' &rightarrow; k a w'
+
+putcIO a = \w &rightarrow; case a of
+                  MkChar a# &rightarrow; case (ccall# putchar a# w) of
+                                 MkIORes# n# w' &rightarrow; MkIORes () w'
+echo :: IO ()
+echo = getcIO `bindIO` \a &rightarrow; if (a == eof)
+                              then unitIO ()
+                              else putcIO a `bindIO` \_ &rightarrow; echo
+mainIO :: IO ()
+mainIO = echo
+```
+
+As an additional gain, monad provides another model for I/O in Haskell.
+
+There were 2 other models for I/O in Haskell before, both required an external authority to perform I/O.
+---
+# We Have I/O in Haskell Now
+```haskell
+type IO a = World &rightarrow; IORes a
+data IORes a = MkIORes a World
+data IORes# a = MkIORes# Int World
+
+unitIO a w = MkIORes a w
+bindIO m k w = case (m w) of MKIORes a w' &rightarrow; k a w'
+
+putcIO a = \w &rightarrow; case a of
+                  MkChar a# &rightarrow; case (ccall# putchar a# w) of
+                                 MkIORes# n# w' &rightarrow; MkIORes () w'
+echo :: IO ()
+echo = getcIO `bindIO` \a &rightarrow; if (a == eof)
+                              then unitIO ()
+                              else putcIO a `bindIO` \_ &rightarrow; echo
+mainIO :: IO ()
+mainIO = echo
+```
+Those good old days...when GHC generates C-- codes:
+```c
+echo() {
+    int a; a = getchar();
+    if (a == eof) { retVal = unitTuple; RETURN; }
+    else          { putchar(a); JUMP( echo );   }
+}
+```
+---
+# We Have I/O in Haskell Now
+- *Imperative functional programming*, Simon Peyton Jones and Philip Walder.
+
+    > Input/output has always appeared to be one of the less satisfactory features of purely functional language: **fitting action into the functional paradigm feels like fitting a square block into a round hole.**
+--
+- Simon Peyton-Jones adding the IO Monad to Haskell ([this-plt-life](http://this-plt-life.tumblr.com/post/44462204757/simon-peyton-jones-adding-the-io-monad-to-haskell))
+.center[![SPJ-io-monad](./io-monad.gif)]
+---
+# We Have I/O in Haskell Now
+
+Modelling I/O using moands is specific to Haskell, but some of the following effects exist in other languages as well. For example,
+
+- non-deterministic search: [http://minikanren.org/](http://minikanren.org/)
+
+- exception, coroutine(e.g. Python's generator), `call/cc`, and more control operators
+
+- (monadic) parser combinator framework. An old (unmaintained) parsing framework [YARD](https://code.google.com/p/yardparser/) also demonstrates this.
+
+.footnote[Consult sec. 9.8 of [Yet Another Haskell Tutorial](http://www.umiacs.umd.edu/~hal/docs/daume02yaht.pdf) for more on monadic parser]
+---
+# And Yet Some Interesting "Effects" Are Monads, too
+Searching:
+```haskell
+pythag = do c &leftarrow; [1..10]
+            b &leftarrow; [1..c]
+            a &leftarrow; [1..b]
+            guard (a^2 + b^2 == c^2)
+            return (a,b,c)
+```
+Enumerating primes:
+```haskell
+import Control.Monad (guard)
+import Control.Monad.Logic (lnot)
+ 
+primesUpTo :: Int &rightarrow; [Int]
+primesUpTo n = do p &leftarrow; [2..n]
+                  lnot (do factorCandidate &leftarrow; [2..(p-1)]
+                           guard (p `mod` factorCandidate == 0))
+                  return p
+```
+---
+# And Yet Some Interesting "Effects" Are Monads, too
+Coroutine, another control effect
+
+```haskell
+data Coroutine r a = Cont ((a &rightarrow; Yield r) &rightarrow; Yield r)
+data Yield a = Done a
+             | Yield Int (Int &rightarrow; Yield a)
+
+yield :: Int &rightarrow; Coroutine a Int
+yield n = Cont (\k &rightarrow; Yield n k)
+
+done :: r &rightarrow; Coroutine r ()
+done = Cont . const . Done
+
+-- running coroutines; `loop` schedules them
+runCoroutine :: Int &rightarrow; [Coroutine a a] &rightarrow; a
+runCoroutine n xs = loop n (map launchCoroutine xs) []
+  where launchCoroutine (Cont k) = k Done
+        loop :: Int &rightarrow; [Yield a] &rightarrow; [Yield a] &rightarrow; a
+        loop m []     nextRound = loop m nextRound []
+        loop m (x:xs) nextRound =
+          case x of
+            Done a &rightarrow; a
+            Yield val f &rightarrow; loop val xs (nextRound ++ [f m])
+```
+---
+# And Yet Some Interesting "Effects" Are Monads, too
+Coroutine, another control effect
+
+```haskell
+yield :: Int &rightarrow; Coroutine a Int
+done :: r &rightarrow; Coroutine r ()
+runCoroutine :: Int &rightarrow; [Coroutine a a] &rightarrow; a
+
+getInput :: String &rightarrow; Coroutine r [Int]
+getInput str = case reads str of
+                [(n, rest)] &rightarrow; do yield n
+                                  getInput rest
+                _           &rightarrow; error "Unexpected end of input"
+
+addInput :: Int &rightarrow; [Int] &rightarrow; Coroutine r [Int]
+addInput n xs = do
+  m &leftarrow; yield 1
+  if n+m < 16
+    then addInput (n+m) (xs ++ [m])
+    else return xs
+
+demo = runCoroutine (-1)
+         [getInput . concat . map (' ':) . map show $ [0..],
+         addInput 0 []]
+```
+---
+# And Yet Some Interesting "Effects" Are Monads, too
+Parser Combinator
+
+```haskell
+data Parser a = Parser { String &rightarrow; Maybe (a, String) }
+
+instance Monad Parser where
+  return a = Parser (\s &rightarrow; Just (a, s))
+  (Parser m) >>= f =
+    Parser (\s &rightarrow; case m s of
+                    Nothing &rightarrow; Nothing
+                    Just (a, s') &rightarrow; let Parser g = f a in g s')
+
+matchChar ch = Parser (\s &rightarrow; case s of
+                              (ch:rest) &rightarrow; Just (ch, rest)
+                              _         &rightarrow; Nothing)
+
+p1 <|> p2 = Parser (\s &rightarrow; case p1 s of
+                            Just res &rightarrow; res
+                            Nothing  &rightarrow; p2 s)
+
+matchSome p = do
+  a &leftarrow; p
+  as &leftarrow; matchMany ps <|> return []
+  return (a:as)
+```
+---
+# More Effects To Go...
+- Need I/O support
+    * concurrency and parallelism
+    * transaction
+    * the ST Monad
+
+- Can be implemented in a functionally pure manner
+    * random numbers
+    * mutable states
+    * global environment
+    * logging
+
+- Lots of control operators can be implemented by the continuation monad
+---
+# The Essence of Functional Programming
+- The very monad: `Cont`, $\text{Cont}\,r\,a = (a\to r)\to r$, for delimited continuations
+
+- `Cont` is clearly a monad, yet almost every monad can be [embedded into the `Cont` monad](http://blog.sigfpe.com/2008/12/mother-of-all-monads.html).
+
+- It's sort of a super `goto` for functional languages. Some FPL compiler transforms the program into close relatives of continuation-passing style.
+
+- CPS is about implementation, while monads provide abstraction as well as some reasoning.
+---
+# The Syntax for Contexts
+The following fragment of OCaml:
+
+```ocaml
+let cnt = ref 0
+let tick () = (cnt := !cnt + 1; !cnt)
+```
+
+becomes when expressed using `do`-notations,
+```haskell
+tick = do
+  cnt &leftarrow; get
+  put (cnt + 1)
+  get
+```
+
+We can't simply write `!cnt + 1` anymore -- `(+)` is a pure function whereas `!cnt` is a *computation*. We have to **extract** the value of the state using `val &leftarrow; get` inorder to manipulate the it.
+---
+# The Syntax for Contexts
+It is possible, though, to inject a pure function into a context using
+```haskell
+liftM2 :: (a &rightarrow; b &rightarrow; c) &rightarrow; (m a &rightarrow; m b &rightarrow; m c)
+```
+which allows us to write
+```haskell
+liftM2 (+) get (return 1)
+```
+Or, in terms of applicative functors,
+```haskell
+(+) <$> get <*> pure 1
+```
+
+---
+# The Syntax for Contexts
+Idris has a special syntax, idiom brackets, for computations:
+
+.center[`[| (+) get 1 |]`]
+
+The effects are, in some sense, first class citizens now!
+
+```haskell
+tick = modify (+1) >> get -- increase the integer state by 1
+
+twice m = do
+  x &leftarrow; m
+  y &leftarrow; m
+  return (x,y)
+
+ticktick = twice tick
+```
+
+...At the price of makeing them explicit. For many other languages, those effects are hard-wired with built-in evaluation order.
+---
+# Things That Aren't Plain Monads
+- Resource which changes
+
+```haskell
+class Monadish m where
+  gret :: a &rightarrow; m i i a
+  gbind :: m i j a &rightarrow; (a &rightarrow; m j k b) &rightarrow; m i k b
+```
+We can record the status of resources in types:
+```haskell
+data Opened = Opened
+openFile :: String &rightarrow; Mode &rightarrow; Handle () Opened ()
+fgets :: Handle Opened Opened String
+closeFile :: Handle Opened () ()
+```
+---
+# Things That Aren't Plain Monads
+- Parser with lookaheads. The type $a \to m\,b$ prevents us from having lookaheads: we cannot obtain the parser $m\;b$ without supplying an $a$.
+
+- Instead, we can use parse of type $m\,a\,b$. Then the $``$sequencing$"$ function of two parsers shall have type $m\,b\,c \to m\,c\,d \to m\,b\,d$.
+
+    * That's [arrow](http://ro-che.info/ccc/12)s!
+---
+# To Combine Different Monads...
+So far, we have talked about *individual* monads, but there is no way to combine different monads.
+
+- state: $s \to (a,s)$
+- exception: $\text{Either}\,e\,a$
+- I/O: $\text{IO}\,a$
+
+How could we create a monad that support both mutable state and exception?
+
+--
+
+- state &amp; exception: we can choose either of the following types, making it a monad
+
+    * $s \to (\text{Either}\,e\,a, s)$
+    * $s\to\text{Either}\,e\,(a, s)$
+---
+# To Combine Different Monads...
+- $s \to (\text{Either}\,e\,a, s)$ or $s\to \text{Either}\,e\,(a, s)$
+
+This is where **monad transformers** come into play. We wish to stack more effects into an existing monad.
+
+- $s \to (\text{Either}\, e\, a, s)$, let $\text{State}\, s\, a := s \to (a,\, s)$
+- $s \to \text{Either}\, e\, (a, s)$, let $\text{Error}\, e\, a := \text{Either}\, e\, a$
+
+---
+# To Combine Different Monads...
+- $s \to (\text{Either}\,e\,a, s)$ or $s\to \text{Either}\,e\,(a, s)$
+
+This is where **monad transformers** come into play. We wish to stack more effects into an existing monad.
+
+- $\text{State}\, s\, (\text{Either}\, e\, a)$, where $\text{State}\, s\, a := s \to (a,\, s)$
+- $s \to \text{Error}\, e\, (a, s)$, where $\text{Error}\, e\, a := \text{Either}\, e\, a$
+
+--
+
+Define functions:
+
+- $\text{ErrorT}\,e\,m\,a = m\,(\text{Either}\,e\,a)$
+- $\text{StateT}\,s\,m\,a = s\to m\,(a, s)$
+---
+# To Combine Different Monads...
+- $s \to (\text{Either}\,e\,a, s)$ or $s\to \text{Either}\,e\,(a, s)$
+
+This is where **monad transformers** come into play. We wish to stack more effects into an existing monad.
+
+- $\text{ErrorT}\,e\,(\text{State}\, s)\,a$, where $\text{State}\, s\, a := s \to (a,\, s)$
+- $\text{StateT}\,s\,(\text{Error}\, e)\,a$, where $\text{Error}\, e\, a := \text{Either}\, e\, a$
+
+Define functions:
+
+- $\text{ErrorT}\,e\,m\,a = m\,(\text{Either}\,e\,a)$, e.g. $m := \text{State}\, s$
+- $\text{StateT}\,s\,m\,a = s\to m\,(a, s)$, e.g. $m := \text{Error}\, e$
+---
+# To Combine Different Monads
+The monad transformer class stacks another layer over the current monad, and provides a `lift` function to lift computations from $m$.
+
+```haskell
+class MonadTrans t where
+  lift :: Monad m &Rightarrow; m a &rightarrow; t m a
+
+newtype StateT s m a = StateT { runStateT :: s &rightarrow; m (a, s) }
+instance MonadTrans (StateT s) where
+  lift m = StateT (\s &rightarrow; do { a &leftarrow; m; return (a, s) })
+
+instance Monad m &Rightarrow; Monad (StateT s m) where
+  return = lift . return
+  (StateT m) >>= f = StateT $ \s0 &rightarrow; do (a, s1) &leftarrow; m s0
+                                        let StateT g = f a in g s1
+getT :: Monad m &Rightarrow; StateT s m s
+putT :: Monad m &Rightarrow; s &rightarrow; StateT s m ()
+getT = StateT (\s &rightarrow; return (s, s))
+putT s = StateT (\_ &rightarrow; return ((), s))
+```
+
+--
+
+> $``$You escape from a monad the same way you escape from a building on fire: run.$"$ #icfp13
+---
+# To Combine Different Monads...
+Instead of explicitly writing the monad stack for every function, there is also a capability-based implement-ation that automatically infers the use of `lift`:
+
+```haskell
+func :: (MonadReader Integer m, MonadState [Integer] m,
+         MonadWriter String m)
+     &Rightarrow; m Integer
+func = do
+  a &leftarrow; ask
+  (n:_) &leftarrow; get
+  modify (n*a:)
+  tell ("haha " ++ show a)
+  return (n+a)
+
+toobig :: MonadError String m
+       &Rightarrow; Integer &rightarrow; m ()
+toobig n = if n > 5 then throwError (strMsg "TooBig") else return ()
+
+test1 :: (MonadReader Integer m, MonadState [Integer] m,
+          MonadWriter String m, MonadError String m)
+      &Rightarrow; m ()
+test1 = func >>= toobig
+```
+---
+# To Combine Different Monads...
+And exceptions?
+```haskell
+f1 :: Monad m &Rightarrow; ErrorT E1 (ErrorT E2 (ErrorT E3 m)) a
+
+f2 :: Monad m &Rightarrow; ErrorT E4 m a
+
+f3 :: Monad m &Rightarrow; ErrorT E2 (ErrorT E4 m) a
+```
+
+--
+
+- Which looks just like...
+
+--
+
+```java
+public static FileInputStream f1(String fileName)
+  throws FileNotFoundException { ...
+
+public void g()
+  throws Ex1, Ex3 { ...
+
+public static void main(string[] args)
+  throws IOException { ....
+```
+---
+# Problems With Monad Transformers
+- manually lifting is painful, but typeclasses are hard-wired
+
+- Type inference no longer works well. We need to annotate some types.
+
+- The interaction between control operators is bad
+
+- The list monad transfomer is wrong
+
+- The order matters: $\text{StateT}\, s\, (\text{ErrorT}\, e)\, a$ is different from $\text{ErrorT}\, e\, (\text{StateT}\, s)\, a$. 
+
+    - the relationship between exception and states is not hard-wired as in other languages
+
+---
+# Monads, Zippers and Views
+- Using mapping between **monad stacks** to transforms monad stacks, probably hiding specific layers.
+
+    * We can selectively view only some layer of monad stacks
+    * `state`s can be made read-only -- they become `reader`s!
+
+- Zippers works for monad stacks as well -- imaging walking up and down in the monad stack!
+
+- Also possible *tag* different layers
+---
+# Effect $``$System$"$ -- A Special Case
+We can easily construct disjoint union for *functor*s, hence combine *free monad*s easily:
+```haskell
+data Functor v = Functor1 (F v) | Functor2 (G v) | ...
+data Free f a = Pure a | Impure (f (Pure f a)) -- set f := Functors
+```
+We can make IO effects finer: .small[(taken from [Data types a la carte](http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.101.4131))]
+
+```haskell
+data Terminal a = GetChar (Char &rightarrow; a) | PutChar Char a
+data FileIO a = ReadFile FilePath (String &rightarrow; a)
+              | WriteFile FilePath String a
+
+foldFree :: Functor f &Rightarrow; (a &rightarrow; b) &rightarrow; (f b &rightarrow; b) &rightarrow; Free f a &rightarrow; b
+
+exec :: Exec f &Rightarrow; Free f a &rightarrow; IO a
+exec = foldFree return toIO
+
+class Functor f &Rightarrow; Exec f where toIO :: f (IO a) &rightarrow; IO a
+instance Exec Terminal where
+  toIO (GetChar f) = getChar >>= f
+  toIO (PutChar c f) = putChar c >>= f
+```
+.small[examples are ]
+---
+# Algebraic Handler &amp; Effect System
+- Programs *send request* to a *separate authority* that actually handle effects
+
+- Oleg has implemented a [library](http://okmij.org/ftp/Haskell/extensible/) using coroutines
+
+- We have only **one** monad now: The type-indexed $\text{Eff}$ monad that implements the coroutine client.
+
+```haskell
+ask :: Member (Reader e) r &Rightarrow; Eff r e
+ask = sendReq (inj . Reader)
+
+choice :: Member Choice r &Rightarrow; [a] &rightarrow; Eff r a
+choice xs = sendReq (inj . Choice xs)
+
+get :: Member (State s) r &Rightarrow; Eff r s
+get = sendReq (inj . GetState)
+
+put :: Member (State s) r &Rightarrow; s &rightarrow; Eff r ()
+put s = sendReq (inj . SetState s)
+```
+---
+# Algebraic Handler &amp; Effect System
+- Programs *send request* to a *separate authority* that actually handle effects
+
+- Oleg has implemented a [library](http://okmij.org/ftp/Haskell/extensible/) using coroutines
+
+- We have only **one** monad now: The type-indexed $\text{Eff}$ monad that implements the coroutine client.
+
+- We can also lift one monad $m$ (e.g. `IO`) into $\text{Eff}$.
+
+```haskell
+runState :: &forall; s r a. s &rightarrow; Eff (State s &#x25B7; r) a &rightarrow; Eff r a
+runState initVal m = loop initVal (admin m)
+
+loop :: &forall; w. s &rightarrow; VE w (State s :> r) &rightarrow; Eff r w
+loop s (Val x) = return x
+loop s (E un)  = case decomp un of
+  Right (GetState k)    &rightarrow; loop s (k s)
+  Right (SetState s' k) &rightarrow; loop s' (k ())
+  Left u &rightarrow; sendReq (\k &rightarrow; fmap k u) >>= loop val
+```
+---
+# Where Are We Going?
+- Monads, originally proposed as a model for computations, has shown its power in describing effects and difficulties in composition
+
+- Different effects are described precisely:
+
+    * State: $T\, A = (A\times S)^S$
+    * Possible failure: $T\, A = E + A$
+    * Non-determinism: $T\, A = \mathcal{P}(A)$    
+    * Interactive input and output: $T\, A = \mu X. A + X^U$, $T\, A = \mu X. A + U \times X$
+
+- Effect systems: effects are no longer separated by small monads 
+---
+# Haskell Is Useless
+- [Simon Peyton Jones - Haskell is useless](https://www.youtube.com/watch?v=iSmkqocn0oQ&feature=youtu.be)
+
+- safety, controlled side-effects
+
+- We are approaching the same destination from two opposite ends
+---
+# Final Remarks
+- Haskell B.C. (before Haskell98) has other kinds of I/O systems: Dialogues, CPS-style I/O.
+
+- There have been different refinements or separation to/from the `Monad` typeclass in Haskell, each characterizing some properties.
+
+    - `Alternative` in `Control.Applicative` v.s. `MonadPlus`
+    - `Arrow`
+    </textarea>
+    <script src="./remark-0.5.4.min.js" type="text/javascript"></script>
+    <script src="./highlight.pack.js"></script>
+    <script type="text/javascript">
+      /* override default hljs engine to provide Haskell syntax highlight */
+      remark.highlighter.engine = hljs;
+      var slideshow = remark.create({
+        highlightStyle: 'ir_black'
+      });
+      MathJax.Hub.Config({
+        "HTML-CSS": { scale: 75 },
+        tex2jax: {
+          skipTags: ['code', 'script', 'noscript', 'style' ,'textarea', 'pre'],
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['$$', '$$'], ['\\[', '\\]']]
+        }
+      });
+      MathJax.Hub.Configured();
+    </script>
+    <div class="remark-notes-area">hello world</div>
+</body></html>
