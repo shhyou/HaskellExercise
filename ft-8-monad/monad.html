@@ -535,7 +535,9 @@ closeFile :: Handle Opened () ()
 # Things That Aren't Plain Monads
 - Parser with lookaheads. The type $a \to m\,b$ prevents us from having lookaheads: we cannot obtain the parser $m\;b$ without supplying an $a$.
 
-- Instead, we can use parse of type $m\,a\,b$. Then the $``$sequencing$"$ function of two parsers shall have type $m\,b\,c \to m\,c\,d \to m\,b\,d$.
+- Instead, we can use parser of type $m\,a\,b$.
+
+    Then the $``$sequencing$"$ function of two parsers shall have type $m\,b\,c \to m\,c\,d \to m\,b\,d$.
 
     * That's [arrow](http://ro-che.info/ccc/12)s!
 ---
@@ -543,7 +545,7 @@ closeFile :: Handle Opened () ()
 So far, we have talked about *individual* monads, but there is no way to combine different monads.
 
 - state: $s \to (a,s)$
-- exception: $\text{Either}\,e\,a$
+- exception: $\text{Either}\,e\,a = \text{Left}\, e\, | \, \text{Right}\, a$
 - I/O: $\text{IO}\,a$
 
 How could we create a monad that support both mutable state and exception?
@@ -561,7 +563,7 @@ How could we create a monad that support both mutable state and exception?
 This is where **monad transformers** come into play. We wish to stack more effects into an existing monad.
 
 - $s \to (\text{Either}\, e\, a, s)$, let $\text{State}\, s\, a := s \to (a,\, s)$
-- $s \to \text{Either}\, e\, (a, s)$, let $\text{Error}\, e\, a := \text{Either}\, e\, a$
+- $s \to \text{Either}\, e\, (a, s)$
 
 ---
 # To Combine Different Monads...
@@ -570,7 +572,7 @@ This is where **monad transformers** come into play. We wish to stack more effec
 This is where **monad transformers** come into play. We wish to stack more effects into an existing monad.
 
 - $\text{State}\, s\, (\text{Either}\, e\, a)$, where $\text{State}\, s\, a := s \to (a,\, s)$
-- $s \to \text{Error}\, e\, (a, s)$, where $\text{Error}\, e\, a := \text{Either}\, e\, a$
+- $s \to \text{Either}\, e\, (a, s)$
 
 --
 
@@ -585,12 +587,12 @@ Define functions:
 This is where **monad transformers** come into play. We wish to stack more effects into an existing monad.
 
 - $\text{ErrorT}\,e\,(\text{State}\, s)\,a$, where $\text{State}\, s\, a := s \to (a,\, s)$
-- $\text{StateT}\,s\,(\text{Error}\, e)\,a$, where $\text{Error}\, e\, a := \text{Either}\, e\, a$
+- $\text{StateT}\,s\,(\text{Either}\, e)\,a$,
 
 Define functions:
 
 - $\text{ErrorT}\,e\,m\,a = m\,(\text{Either}\,e\,a)$, e.g. $m := \text{State}\, s$
-- $\text{StateT}\,s\,m\,a = s\to m\,(a, s)$, e.g. $m := \text{Error}\, e$
+- $\text{StateT}\,s\,m\,a = s\to m\,(a, s)$, e.g. $m := \text{Either}\, e$
 ---
 # To Combine Different Monads
 The monad transformer class stacks another layer over the current monad, and provides a `lift` function to lift computations from $m$.
@@ -688,9 +690,9 @@ public static void main(string[] args)
     * We can selectively view only some layer of monad stacks
     * `state`s can be made read-only -- they become `reader`s!
 
-- Zippers works for monad stacks as well -- imaging walking up and down in the monad stack!
+- Zippers work for monad stacks as well -- imaging walking up and down in the monad stack!
 
-- Also possible *tag* different layers
+- Also possible to *tag* different layers
 ---
 # Effect $``$System$"$ -- A Special Case
 We can easily construct disjoint union for *functor*s, hence combine *free monad*s easily:
@@ -749,14 +751,14 @@ put s = sendReq (inj . SetState s)
 
 ```haskell
 runState :: &forall; s r a. s &rightarrow; Eff (State s &#x25B7; r) a &rightarrow; Eff r a
-runState initVal m = loop initVal (admin m)
+runState initVal m = loopState initVal (admin m)
 
-loop :: &forall; w. s &rightarrow; VE w (State s :> r) &rightarrow; Eff r w
-loop s (Val x) = return x
-loop s (E un)  = case decomp un of
-  Right (GetState k)    &rightarrow; loop s (k s)
-  Right (SetState s' k) &rightarrow; loop s' (k ())
-  Left u &rightarrow; sendReq (\k &rightarrow; fmap k u) >>= loop val
+loopState :: &forall; w. s &rightarrow; VE w (State s :> r) &rightarrow; Eff r w
+loopState s (Val x) = return x
+loopState s (E un)  = case decomp un of
+  Right (GetState k)    &rightarrow; loopState s (k s)
+  Right (SetState s' k) &rightarrow; loopState s' (k ())
+  Left u &rightarrow; sendReq (\k &rightarrow; fmap k u) >>= loopState val
 ```
 ---
 # Where Are We Going?
