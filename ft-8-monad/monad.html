@@ -479,7 +479,7 @@ tick = do
   get
 ```
 
-We can't simply write `!cnt + 1` anymore -- `(+)` is a pure function whereas `!cnt` is a *computation*. We have to **extract** the value of the state using `val &leftarrow; get` inorder to manipulate the it.
+We can't simply write `!cnt + 1` anymore -- `(+)` is a pure function whereas `!cnt` is a *computation*. We have to **extract** the value of the state using `val &leftarrow; get` inorder to manipulate it.
 ---
 # The Syntax for Contexts
 It is possible, though, to inject a pure function into a context using
