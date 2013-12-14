@@ -471,7 +471,7 @@ let cnt = ref 0
 let tick () = (cnt := !cnt + 1; !cnt)
 ```
 
-becomes when expressed using `do`-notations,
+becomes clumsy when expressed using `do`-notations,
 ```haskell
 tick = do
   cnt &leftarrow; get
