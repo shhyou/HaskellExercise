@@ -1,0 +1,48 @@
+data BTree a = Leaf
+             | Bin (BTree a) a (BTree a)
+
+h :: f [a] -> b
+
+data Zipper a = L a (BTree a)
+              | R a (BTree a)
+
+want to calculate
+h (xs +. t) = h' xs +o h t
+
++. :: [Zipper a] -> BTree a -> BTree a
+
+foldt :: (a -> b -> b -> b) -> b -> BTree a -> b
+
+foldtr :: (a -> b -> b -> b) -> ([Zipper a], b) -> b
+
+h . (+.) = foldtr f . (id * h)
+h . (+.) = (+o) . (h' * h)
+         = foldtr f . (id * h)
+         = foldtr f . (id * h . h^{-1} . h)
+         = foldtr f . (id * h) . (id * h^{-1} . h)
+         = h . (+.) . (id * h^{-1} . h)
+                { //TODO: h . (+.) = g . (h' * id) } }
+         = g . (h' * id) . (id * h^{-1} . h)
+         = g . (h' . h'^{-1} . h' * id) . (id * h^{-1} . h)
+         = g . (h' * id) . (h'^{-1} . h' * id) . (id * h^{-1} . h)
+         = h . (+.) . (h'^{-1} . h' * id) . (id * h^{-1} . h)
+         = h . (+.) . (h'^{-1} . h' * h^{-1} . h)
+         = h . (+.) . (h'^{-1} * h^{-1}) . (h^{-1} . h)
+           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~(+o)
+
+if h' = foldl (|>) e'
+
+h ([] +. t) = h t
+            = g (h' [], t)
+            = g (e', t)
+
+h (xs ++ [L a r] +. t) = h (xs +. Bin t a r)
+                       = g (h' xs, Bin t a r)
+
+=> g (e', t) = h t
+   g (b, Bin t a r) = g (b |> L a r, t)
+
+h . (+.) = (+o) . (h' * h)
+         = foldtr f . (id * h)
+         = g . (h' * id)
+         = 
