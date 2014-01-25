@@ -14,9 +14,9 @@ instance Monad (Eff r) where
 instance Functor (Eff r) where
   fmap f m = Eff (runEff m . (. f))
 
-data VE w r = Val w | E (Union r (VE w r))
+data VE w r = Val w | E (U r (VE w r))
 
-sendReq :: (forall w. (a -> VE w r) -> Union r (VE w r)) -> Eff r a
+sendReq :: (forall w. (a -> VE w r) -> U r (VE w r)) -> Eff r a
 sendReq f = Eff $ \k -> E (f k)
 
 admin :: Eff r w -> VE w r
@@ -31,7 +31,7 @@ newtype Reader e v = Reader (e -> v)
 instance Functor (Reader e) where
   fmap f (Reader g) = Reader (f . g)
 
-ask :: Member (Reader e) r => Eff r e
+ask :: (Reader e :& r) => Eff r e
 ask = sendReq (inj . Reader)
 
 runReader :: forall r w e. Eff (Reader e :> r) w -> e -> Eff r w
@@ -43,7 +43,7 @@ runReader m e = loop (admin m)
           Left u -> Eff $ \k -> E (fmap (\ve -> runEff (loop ve) k) u)
         --       -> sendReq (<$> u) >>= loop
 
-local :: forall e r. Member (Reader e) r => (e -> e) -> Eff r e -> Eff r e
+local :: forall e r. (Reader e :& r) => (e -> e) -> Eff r e -> Eff r e
 local f m = do
   e0 <- ask
   let e = f e0
@@ -54,8 +54,8 @@ local f m = do
         Nothing -> sendReq (\k -> fmap k un) >>= loop
   loop (admin m)
         --         we want an Eff r (VE w r)     loop, process all requests
--- now we have only  un :: Union r (VE w r)
--- sendReq :: (forall t. (VE w r -> VE t r) -> Union r (VE t r)) -> Eff r (VE w r)
+-- now we have only  un :: U r (VE w r)
+-- sendReq :: (forall t. (VE w r -> VE t r) -> U r (VE t r)) -> Eff r (VE w r)
 --                       ^~~~~~~~~~~ (k ::)   ^~~~~ (fmap k un ::)
 
 {- Exception -}
@@ -63,10 +63,10 @@ newtype Error e v = Error e
 instance Functor (Error e) where
   fmap _ (Error e) = (Error e)
 
-throwError :: Member (Error e) r => e -> Eff r a
+throwError :: (Error e :& r) => e -> Eff r a
 throwError msg = sendReq (inj . const (Error msg))
 
-catchError :: Member (Error e) r => Eff r a -> (e -> Eff r a) -> Eff r a
+catchError :: (Error e :& r) => Eff r a -> (e -> Eff r a) -> Eff r a
 catchError m handler = loop (admin m)
   where loop (Val x) = return x
         loop (E un)  = case prj un of
@@ -86,7 +86,7 @@ data Choice v = forall a. Choice [a] (a -> v)
 instance Functor Choice where
   fmap f (Choice xs k) = Choice xs (f . k)
 
-choice :: Member Choice r => [a] -> Eff r a
+choice :: (Choice :& r) => [a] -> Eff r a
 choice xs = sendReq (inj . Choice xs)
 
 runChoice :: forall r a. Eff (Choice :> r) a -> Eff r [a]
@@ -104,13 +104,13 @@ instance Functor (State s) where
   fmap f (GetState k) = GetState (f . k)
   fmap f (SetState s k) = SetState s (f . k)
 
-get :: Member (State s) r => Eff r s
+get :: (State s :& r) => Eff r s
 get = sendReq (inj . GetState)
 
-put :: Member (State s) r => s -> Eff r ()
+put :: (State s :& r) => s -> Eff r ()
 put s = sendReq (inj . SetState s)
 
-modify :: forall r s. Member (State s) r => (s -> s) -> Eff r ()
+modify :: forall r s. (State s :& r) => (s -> s) -> Eff r ()
 modify f = do
   state :: s <- get
   put (f state)

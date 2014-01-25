@@ -7,7 +7,7 @@ import Control.Monad (liftM2, when)
 
 {- tests -}
 
-testS :: Member (State Int) r => Eff r Int
+testS :: (State Int :& r) => Eff r Int
 testS = do
   n :: Int <- get
   modify (+(1 ::Int))
@@ -16,18 +16,18 @@ testS = do
   k :: Int <- get
   return (n*m*k)
 
-testR :: Member (Reader Int) r => Eff r Int
+testR :: (Reader Int :& r) => Eff r Int
 testR = do
   n :: Int <- ask
   return $ 3 * n + 1
 
-testR2 :: Member (Reader Int) r => Eff r Int
+testR2 :: (Reader Int :& r) => Eff r Int
 testR2 = local (+1) testR
 
 testRP = run $ runReader testR (5 :: Int)
 testR2P = run $ runReader testR2 (5 :: Int)
 
-testE :: (Member (Error String) r, Num a, Ord a) => a -> Eff r ()
+testE :: (Error String :& r, Num a, Ord a) => a -> Eff r ()
 testE m = do
   if (m > 10)
     then throwError "m > 10"
@@ -44,7 +44,7 @@ testC = do
 
 testCP = run $ runChoice testC
 
-testAll :: (Member (Error String) r, Member (Reader Int) r, Member Choice r) => Eff r (Int, Int)
+testAll :: (Error String :& r, Reader Int :& r, Choice :& r) => Eff r (Int, Int)
 testAll = do
   up :: Int <- local (*2) testR
   x :: Int <- choice [1..up]
@@ -59,7 +59,7 @@ concreteTestP = run $ runChoice $ runError $ runReader concreteTest (2 :: Int)
 
 -- https://groups.google.com/forum/#!topic/haskell-pipes/BTQsITNwflc
 -- by Gabriel Gonzalez
-example :: (Member (Error String) r, Member (State Int) r) => Eff r Int
+example :: (Error String :& r, State Int :& r) => Eff r Int
 example = do 
     put (1 :: Int)
     (do put (2 :: Int)
