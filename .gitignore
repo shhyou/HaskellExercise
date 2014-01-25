@@ -3,3 +3,5 @@
 *.exe
 *.log
 *.aux
+*.pdf
+*.gz

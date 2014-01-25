@@ -1,0 +1,37 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\newcommand{\hdata}{\mathbf{data}}
+\newcommand{\hclass}{\mathbf{class}}
+\newcommand{\hinstance}{\mathbf{instance}}
+\newcommand{\hwhere}{\mathbf{where}}
+\newcommand{\hFunctor}{\text{Functor}}
+\newcommand{\hMaybe}{\text{Maybe}}
+\newcommand{\hEither}{\text{Either}}
+\newcommand{\ty}{:\!:}
+\newcommand{\C}[1]{\text{#1}}
+\newcommand{\Cbar}{\;\mathbf{|}\;}
+
+% command for this file only
+\newcommand{\U}{\bigcup\nolimits}
+
+\begin{document}
+\subsection*{Open Union}
+\[\begin{aligned}
+&\hdata\; \U_{rs}\; w \\
+&\hdata\; (a \ty * \to *) \rhd b \\
+\\
+&\hclass\; (t \ty * \to *) \in rs\; \hwhere \\
+&\hinstance\; t\in (t\rhd rs)\; \hwhere \\
+&\hinstance\; t\in rs \Rightarrow t \in (t' \rhd rs)\; \hwhere \\
+\\
+&inj \ty (\hFunctor\: t,\, t \in rs) \Rightarrow t\, v \to \U_{rs}\, v \\
+&prj \ty t \in rs \Rightarrow \U_{rs}\,v \to \hMaybe\, (t\, v) \\
+&decomp \ty \U_{t \rhd rs}\, v \to \hEither\, \left(\U_{rs}\, v\right)\, (t\, v)
+\end{aligned}\]
+\subsection*{Coroutine Data Type}
+\[ \hdata\; \C{VE}\: rs\: w = \C{Val}\, x \Cbar \C{E}\, \left(\U_{rs}\, \C{VE}\: rs\: w\right) \]
+\end{document}
