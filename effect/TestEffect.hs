@@ -56,3 +56,19 @@ concreteTest :: Eff (Reader Int :> Error String :> Choice :> Void) (Int, Int)
 concreteTest = testAll
 
 concreteTestP = run $ runChoice $ runError $ runReader concreteTest (2 :: Int)
+
+-- https://groups.google.com/forum/#!topic/haskell-pipes/BTQsITNwflc
+-- by Gabriel Gonzalez
+example :: (Member (Error String) r, Member (State Int) r) => Eff r Int
+example = do 
+    put (1 :: Int)
+    (do put (2 :: Int)
+        throwError "Err") `catchError` (\(_ :: String) -> return ())
+    get
+
+-- runExample1 = runExample2
+runExample1 :: Either String Int
+runExample1 = run $ runError $ runState (0 :: Int) example
+
+runExample2 :: Either String Int
+runExample2 = run $ runState (0 :: Int) $ runError example
