@@ -5,7 +5,7 @@ module Effect (Void, module OpenUnion, module Effect) where
 
 import OpenUnion
 import Data.Void
-import Control.Monad (liftM2)
+import Control.Monad (mapM, liftM2, liftM)
 
 newtype Eff r a = Eff { runEff :: forall w. (a -> VE w r) -> VE w r}
 instance Monad (Eff r) where
@@ -16,7 +16,7 @@ instance Functor (Eff r) where
 
 data VE w r = Val w | E (U r (VE w r))
 
-sendReq :: (forall w. (a -> VE w r) -> U r (VE w r)) -> Eff r a
+sendReq :: (forall w. (a -> w) -> U r w) -> Eff r a
 sendReq f = Eff $ \k -> E (f k)
 
 admin :: Eff r w -> VE w r
@@ -25,6 +25,32 @@ admin m = runEff m Val
 run :: Eff Void w -> w
 run m = case admin m of
           Val x -> x
+
+withHandler :: Functor t
+            => (a -> Eff rs w)
+            -> (t (VE a (t :> rs)) -> Eff rs w)
+            -> VE a (t :> rs)
+            -> Eff rs w
+withHandler valHandler effHandler =
+  let handler = \val -> case val of
+                  Val x -> valHandler x
+                  E un  -> case decomp un of
+                    Right tv -> effHandler tv
+                    Left u -> sendReq (\k -> fmap k u) >>= handler
+  in handler
+
+insertHandler :: (Functor t, t :& rs)
+              => (a -> Eff rs w)
+              -> (t (VE a rs) -> Eff rs w)
+              -> VE a rs
+              -> Eff rs w
+insertHandler valHandler effHandler =
+  let handler = \val -> case val of
+                  Val x -> valHandler x
+                  E un -> case prj un of
+                    Just tv -> effHandler tv
+                    Nothing -> sendReq (\k -> fmap k un) >>= handler
+  in handler
 
 {- Reader -}
 newtype Reader e v = Reader (e -> v)
@@ -35,28 +61,15 @@ ask :: (Reader e :& r) => Eff r e
 ask = sendReq (inj . Reader)
 
 runReader :: forall r w e. Eff (Reader e :> r) w -> e -> Eff r w
-runReader m e = loop (admin m)
-  where loop :: VE w (Reader e :> r) -> Eff r w
-        loop (Val x) = return x
-        loop (E un)  = case decomp un of
-          Right (Reader k) -> loop (k e)
-          Left u -> Eff $ \k -> E (fmap (\ve -> runEff (loop ve) k) u)
-        --       -> sendReq (<$> u) >>= loop
+runReader m e = handler (admin m)
+  where handler = withHandler return (\(Reader k) -> handler (k e))
 
 local :: forall e r. (Reader e :& r) => (e -> e) -> Eff r e -> Eff r e
 local f m = do
   e0 <- ask
   let e = f e0
-  let loop :: VE w r -> Eff r w
-      loop (Val x) = return x
-      loop (E un)  = case prj un of
-        Just (Reader k) -> loop (k e)
-        Nothing -> sendReq (\k -> fmap k un) >>= loop
-  loop (admin m)
-        --         we want an Eff r (VE w r)     loop, process all requests
--- now we have only  un :: U r (VE w r)
--- sendReq :: (forall t. (VE w r -> VE t r) -> U r (VE t r)) -> Eff r (VE w r)
---                       ^~~~~~~~~~~ (k ::)   ^~~~~ (fmap k un ::)
+      handler = insertHandler return (\(Reader k) -> handler (k e))
+  handler (admin m)
 
 {- Exception -}
 newtype Error e v = Error e
@@ -67,19 +80,12 @@ throwError :: (Error e :& r) => e -> Eff r a
 throwError msg = sendReq (inj . const (Error msg))
 
 catchError :: (Error e :& r) => Eff r a -> (e -> Eff r a) -> Eff r a
-catchError m handler = loop (admin m)
-  where loop (Val x) = return x
-        loop (E un)  = case prj un of
-          Just (Error e) -> handler e
-          Nothing        -> sendReq (\k -> fmap k un) >>= loop
+catchError m onError = handler (admin m)
+  where handler = insertHandler return (\(Error e) -> onError e)
 
 runError :: forall r w e. Eff (Error e :> r) w -> Eff r (Either e w)
-runError m = loop (admin m)
-  where loop :: VE w (Error e :> r) -> Eff r (Either e w)
-        loop (Val x) = return (Right x)
-        loop (E un)  = case decomp un of
-          Right (Error e) -> return (Left e)
-          Left u -> sendReq (\k -> fmap k u) >>= loop
+runError m = handler (admin m)
+  where handler = withHandler (return . Right) (\(Error e) -> return (Left e))
 
 {- Nondeterminism -}
 data Choice v = forall a. Choice [a] (a -> v)
@@ -90,12 +96,10 @@ choice :: (Choice :& r) => [a] -> Eff r a
 choice xs = sendReq (inj . Choice xs)
 
 runChoice :: forall r a. Eff (Choice :> r) a -> Eff r [a]
-runChoice m = loop (admin m)
-  where loop :: VE a (Choice :> r) -> Eff r [a]
-        loop (Val x) = return [x]
-        loop (E un)  = case decomp un of
-          Right (Choice xs k) -> foldr (liftM2 (++)) (return []) $ map (loop . k) xs
-          Left u -> sendReq (\k -> fmap k u) >>= loop
+runChoice m = handler (admin m)
+  where handler = withHandler wrap collect
+        wrap x = return [x]
+        collect (Choice xs k) = liftM concat $ mapM (handler . k) xs
 
 {- mutable var -}
 data State s v = GetState (s -> v)
@@ -110,26 +114,14 @@ get = sendReq (inj . GetState)
 put :: (State s :& r) => s -> Eff r ()
 put s = sendReq (inj . SetState s)
 
-modify :: forall r s. (State s :& r) => (s -> s) -> Eff r ()
-modify f = do
-  state :: s <- get
-  put (f state)
+modify :: (State s :& r) => (s -> s) -> Eff r ()
+modify f = put . f =<< get
 
 runState :: forall s r a. s -> Eff (State s :> r) a -> Eff r a
-runState initVal m = loop initVal (admin m)
-  where loop :: forall w. s -> VE w (State s :> r) -> Eff r w
-        loop val (Val x) = return x
-        loop val (E un) = case decomp un of
-          Right (GetState k) -> loop val (k val)
-          Right (SetState newVal k) -> loop newVal (k ())
-          Left u -> sendReq (\k -> fmap k u) >>= loop val
+runState initVal m = handler (state initVal) (admin m)
+  where handler = withHandler return
+        state s (GetState    k) = handler (state s) (k s)
+        state _ (SetState s' k) = handler (state s') (k ())
 
 runState' :: forall s r a. s -> Eff (State s :> r) a -> Eff r (a, s)
 runState' initVal m = runState initVal (liftM2 (,) m get)
-
-{-
-data Delim v = forall a r w. Reset (VE a r) (a -> VE w r)
-
-reset :: Member r => Eff r a -> Eff r a
-reset (Eff k) = sendReq (inj . Reset (admin k))
--}
