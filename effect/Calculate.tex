@@ -1,13 +1,19 @@
 \documentclass{article}
 
-\usepackage{amsmath}
+\usepackage[fleqn]{amsmath}
 \usepackage{amsfonts}
 \usepackage{amssymb}
+\usepackage[margin=2.5cm]{geometry}
+
+\usepackage{listings}
+\usepackage[usenames,dvipsnames,svgnames,table]{xcolor}
 
 \newcommand{\hdata}{\mathbf{data}}
 \newcommand{\hclass}{\mathbf{class}}
 \newcommand{\hinstance}{\mathbf{instance}}
 \newcommand{\hwhere}{\mathbf{where}}
+\newcommand{\hcase}{\mathbf{case}}
+\newcommand{\hof}{\mathbf{of}}
 \newcommand{\hFunctor}{\text{Functor}}
 \newcommand{\hMaybe}{\text{Maybe}}
 \newcommand{\hEither}{\text{Either}}
@@ -18,20 +24,124 @@
 % command for this file only
 \newcommand{\U}{\bigcup\nolimits}
 
+\makeatletter
+\newcommand*\idstyle{%
+        \expandafter\id@style\the\lst@token\relax
+}
+\def\id@style#1#2\relax{%
+  \ifcat#1\relax\else
+    \ifnum`#1<\uccode`#1%
+      \it
+    \else
+      \ifnum`#1>\uccode`#1%
+        \it
+      \fi
+    \fi
+  \fi
+}
+\makeatother
+
+\lstdefinelanguage{HaskellUlisses} {
+	%basicstyle=\ttfamily \small,
+	basicstyle=\linespread{1.3}\selectfont,
+	columns=fullflexible,     %%
+	keepspaces=true,          %%
+	identifierstyle=\idstyle, %%
+	morekeywords={data,class,instance,case,of,where,let,in},
+	sensitive=true,
+	morecomment=[l][\color{gray_ulisses}\small\textit]{--},
+	morecomment=[s][\color{gray_ulisses}\small\textit]{\{-}{-\}},
+	morestring=[b]",
+	stringstyle=\color{red},
+	showstringspaces=false,
+	numberstyle=\tiny,
+	numberblanklines=true,
+	showspaces=false,
+	breaklines=true,
+	showtabs=false
+}
+
+\lstnewenvironment{code}{\lstset{language=HaskellUlisses,mathescape=true}}{}
+%{\textbf{Haskell Code} \hspace{1cm} \hrulefill \lstset{language=HaskellUlisses,mathescape=true}}
+%{\hrulesmallskip}
+
 \begin{document}
 \subsection*{Open Union}
-\[\begin{aligned}
-&\hdata\; \U_{rs}\; w \\
-&\hdata\; (a \ty * \to *) \rhd b \\
-\\
-&\hclass\; (t \ty * \to *) \in rs\; \hwhere \\
-&\hinstance\; t\in (t\rhd rs)\; \hwhere \\
-&\hinstance\; t\in rs \Rightarrow t \in (t' \rhd rs)\; \hwhere \\
-\\
-&inj \ty (\hFunctor\: t,\, t \in rs) \Rightarrow t\, v \to \U_{rs}\, v \\
-&prj \ty t \in rs \Rightarrow \U_{rs}\,v \to \hMaybe\, (t\, v) \\
-&decomp \ty \U_{t \rhd rs}\, v \to \hEither\, \left(\U_{rs}\, v\right)\, (t\, v)
-\end{aligned}\]
+\begin{code}
+data $\U_{rs}$ w
+data (a :: $* \to *$) $\rhd$ b
+instance Functor  $\U_{rs}$ where
+
+class (t :: $* \to *$) $\in$ rs where
+instance t $\in$ (t $\rhd$ rs) where
+instance t $\in$ rs $\Rightarrow$ t $\in$ (t' $\rhd$ rs) where
+
+inj :: (Functor t, t $\in$ rs) $\Rightarrow$ t v $\to$ $\U_{rs}$ v
+prj :: t $\in$ rs $\Rightarrow$ $\U_{rs}$ v $\to$ Maybe (t v)
+decomp :: $\U_{t \rhd rs}$ v $\to$ Either ($\U_{rs}$ v) (t v)
+\end{code}
+
 \subsection*{Coroutine Data Type}
-\[ \hdata\; \C{VE}\: rs\: w = \C{Val}\, x \Cbar \C{E}\, \left(\U_{rs}\, \C{VE}\: rs\: w\right) \]
+\begin{code}
+data Eff rs a = Eff { runEff :: $\forall$w. (a $\to$ VE rs rw) $\to$ VE rs w }
+data VE rs w = Val x
+                     | E ($\U_{rs}$ (VE rs w))
+
+send :: ($\forall$w. (a $\to$ w) $\to$ $\U_{rs}$ w) $\to$ Eff rs a
+send f = Eff ($\lambda$k $\to$ E (f k))
+
+runPure :: Eff Void a $\to$ a
+runPure m = case runEff m Val of
+  Val x $\to$ x
+\end{code}
 \end{document}
+%\definecolor{gray_ulisses}{gray}{0.55}
+%\definecolor{castanho_ulisses}{rgb}{0.71,0.33,0.14}
+%\definecolor{preto_ulisses}{rgb}{0.41,0.20,0.04}
+%\definecolor{green_ulises}{rgb}{0.2,0.75,0}
+%	emph=
+%	{[1]
+%%		FilePath,IOError,abs,acos,acosh,all,and,any,appendFile,approxRational,asTypeOf,asin,
+%		abs,acos,acosh,all,and,any,appendFile,approxRational,asTypeOf,asin,
+%		asinh,atan,atan2,atanh,basicIORun,break,catch,ceiling,chr,compare,concat,concatMap,
+%		const,cos,cosh,curry,cycle,decodeFloat,denominator,digitToInt,div,divMod,drop,
+%		dropWhile,either,elem,encodeFloat,enumFrom,enumFromThen,enumFromThenTo,enumFromTo,
+%		error,even,exp,exponent,fail,filter,flip,floatDigits,floatRadix,floatRange,floor,
+%		fmap,foldl,foldl1,foldr,foldr1,fromDouble,fromEnum,fromInt,fromInteger,fromIntegral,
+%		fromRational,fst,gcd,getChar,getContents,getLine,head,id,inRange,index,init,intToDigit,
+%		interact,ioError,isAlpha,isAlphaNum,isAscii,isControl,isDenormalized,isDigit,isHexDigit,
+%		isIEEE,isInfinite,isLower,isNaN,isNegativeZero,isOctDigit,isPrint,isSpace,isUpper,iterate,
+%		last,lcm,length,lex,lexDigits,lexLitChar,lines,log,logBase,lookup,map,mapM,mapM_,max,
+%		maxBound,maximum,maybe,min,minBound,minimum,mod,negate,not,notElem,null,numerator,odd,
+%		or,ord,otherwise,pi,pred,primExitWith,print,product,properFraction,putChar,putStr,putStrLn,quot,
+%		quotRem,range,rangeSize,read,readDec,readFile,readFloat,readHex,readIO,readInt,readList,readLitChar,
+%		readLn,readOct,readParen,readSigned,reads,readsPrec,realToFrac,recip,rem,repeat,replicate,return,
+%		reverse,round,scaleFloat,scanl,scanl1,scanr,scanr1,seq,sequence,sequence_,show,showChar,showInt,
+%		showList,showLitChar,showParen,showSigned,showString,shows,showsPrec,significand,signum,sin,
+%		sinh,snd,span,splitAt,sqrt,subtract,succ,sum,tail,take,takeWhile,tan,tanh,threadToIOResult,toEnum,
+%		toInt,toInteger,toLower,toRational,toUpper,truncate,uncurry,undefined,unlines,until,unwords,unzip,
+%		unzip3,userError,words,writeFile,zip,zip3,zipWith,zipWith3,listArray,doParse
+%	},
+%	emphstyle={[1]\color{blue}\it},
+%	emph=
+%	{[2]
+%		Bool,Char,Double,Either,Float,IO,Integer,Int,Maybe,Ordering,Rational,Ratio,ReadS,ShowS,String,
+%		Word8,InPacket
+%	},
+%	emphstyle={[2]\color{castanho_ulisses}\textnormal},
+%	emph=
+%	{[3]
+%		case,class,data,deriving,do,else,if,import,in,infixl,infixr,instance,let,
+%		module,of,primitive,then,type,where
+%	},
+%	emphstyle={[3]\color{preto_ulisses}\textbf},
+%	emph=
+%	{[4]
+%		quot,rem,div,mod,elem,notElem,seq
+%	},
+%	emphstyle={[4]\color{castanho_ulisses}\textbf},
+%	emph=
+%	{[5]
+%		EQ,False,GT,Just,LT,Left,Nothing,Right,True,Show,Eq,Ord,Num
+%	},
+%	emphstyle={[5]\color{preto_ulisses}\textbf}
