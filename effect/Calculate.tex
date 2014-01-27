@@ -17,6 +17,8 @@
 \newcommand{\hFunctor}{\text{Functor}}
 \newcommand{\hMaybe}{\text{Maybe}}
 \newcommand{\hEither}{\text{Either}}
+\newcommand{\hbind}{>\!\!\!>\!\!\!=}
+\newcommand{\happend}{+\!\!\!+}
 \newcommand{\ty}{:\!:}
 \newcommand{\C}[1]{\text{#1}}
 \newcommand{\Cbar}{\;\mathbf{|}\;}
@@ -43,14 +45,16 @@
 
 \lstdefinelanguage{HaskellUlisses} {
 	%basicstyle=\ttfamily \small,
-	basicstyle=\linespread{1.3}\selectfont,
+	basicstyle=\linespread{1.2}\selectfont\small,
 	columns=fullflexible,     %%
 	keepspaces=true,          %%
 	identifierstyle=\idstyle, %%
-	morekeywords={data,class,instance,case,of,where,let,in},
+	morekeywords={data,class,instance,case,of,where,let,in,do,if,then,else},
 	sensitive=true,
-	morecomment=[l][\color{gray_ulisses}\small\textit]{--},
-	morecomment=[s][\color{gray_ulisses}\small\textit]{\{-}{-\}},
+%	morecomment=[l][\color{gray_ulisses}\small\textit]{--},
+%	morecomment=[s][\color{gray_ulisses}\small\textit]{\{-}{-\}},
+	morecomment=[l][\small\textit]{--},
+	morecomment=[s][\small\textit]{\{-}{-\}},
 	morestring=[b]",
 	stringstyle=\color{red},
 	showstringspaces=false,
@@ -81,19 +85,120 @@ prj :: t $\in$ rs $\Rightarrow$ $\U_{rs}$ v $\to$ Maybe (t v)
 decomp :: $\U_{t \rhd rs}$ v $\to$ Either ($\U_{rs}$ v) (t v)
 \end{code}
 
+\newpage
 \subsection*{Coroutine Data Type}
 \begin{code}
-data Eff rs a = Eff { runEff :: $\forall$w. (a $\to$ VE rs rw) $\to$ VE rs w }
+data Eff rs a = Eff { runEff :: $\forall$w. (a $\to$ VE rs w) $\to$ VE rs w }
 data VE rs w = Val x
                      | E ($\U_{rs}$ (VE rs w))
 
 send :: ($\forall$w. (a $\to$ w) $\to$ $\U_{rs}$ w) $\to$ Eff rs a
 send f = Eff ($\lambda$k $\to$ E (f k))
 
+withHandler :: Functor t
+                $\Rightarrow$ (a $\to$ Eff rs w)
+                $\to$ (t (VE a (t $\rhd$ rs)) $\to$ Eff rs w)
+                $\to$ VE a (t $\rhd$ rs)
+                $\to$ Eff rs w
+withHandler valHandler effHandler (Val x) = valHandler x
+withHandler valHandler effHandler (E un) = case decomp un of
+    Right tv $\to$ effHandler tv
+    Left u $\to$ send ($\lambda$k $\to$ fmap k u) $\hbind$ withHandler valHandler effHandler
+
+-- pure computations
+data Void
 runPure :: Eff Void a $\to$ a
 runPure m = case runEff m Val of
   Val x $\to$ x
+
+-- state
+data State s v = GetState (s $\to$ v)
+                     | SetState s (() $\to$ v)
+runState :: s $\to$ Eff (State s $\rhd$ rs) a $\to$ Eff rs a
+runState s m = handleSt (state s) (runEff m Val) where
+    handleSt = withHandler return
+    state s (GetState k) = handleSt (state s) (k s)
+    state s (PutState s$'$ k) = handleSt (state s$'$) (k ())
+
+-- error
+data Error e v = Error e
+runError :: Eff (Error e $\rhd$ rs) a $\to$ Eff rs (Either e a)
+runError m = handleErr (runEff m Val) where
+    handleErr = withHandler (return $\circ$ Right) ($\lambda$(Error e) $\to$ return (Left e))
 \end{code}
+\subsection*{Calculation}
+\begin{code}
+abc
+\end{code}
+\subsection*{{\ttfamily ListT} done..}
+done wrong:
+\begin{code}
+newtype ListT m a = ListT { runListT :: m [a] }
+wrap a = [a]
+
+instance Monad m $\Rightarrow$ Monad (ListT m) where
+    return = ListT $\circ$ return $\circ$ wrap
+    (ListT m) $\hbind$ f = ListT (m $\hbind$ mapM (runListT $\circ$ f) $\hbind$ return $\circ$ concat)
+
+instance MonadTrans ListT where
+    lift m = ListT (m $\hbind$ return $\circ$ wrap)
+\end{code}
+monad laws:
+\begin{enumerate}
+\item $return\: x \hbind f = f\, x$
+\begin{code}
+   return x $\hbind$ f
+-- definition of return
+= ListT (return [x]) $\hbind$ f
+-- definition of ($\hbind$)
+= ListT (return [x] $\hbind$ mapM (runListT $\circ$ f) $\hbind$ return $\circ$ concat)
+-- m is a monad
+= ListT (mapM (runListT $\circ$ f) [x] $\hbind$ return $\circ$ concat)
+-- definition of mapM
+= ListT (runListT (f x) $\hbind$ return $\circ$ wrap $\hbind$ return $\circ$ concat)
+-- m is a monad
+= ListT (runListT (f x) $\hbind$ $\lambda$y $\to$ return (wrap y) $\hbind$ return $\circ$ concat)
+= ListT (runListT (f x) $\hbind$ $\lambda$y $\to$ return (concat [y]))
+= ListT (runListT (f x) $\hbind$ $\lambda$y $\to$ return y)
+= ListT (runListT (f x) $\hbind$ return)
+-- m is a monad
+= ListT (runListT (f x)))
+= f x
+\end{code}
+\item $m \hbind return = m$
+\begin{code}
+   m $\hbind$ return
+= ListT (runListT m $\hbind$ mapM (runListT $\circ$ (ListT $\circ$ return $\circ$ wrap)) $\hbind$ return $\circ$ concat)
+= ListT (runListT m $\hbind$ mapM (return $\circ$ wrap) $\hbind$ return $\circ$ concat)
+-- ?mapM_and_concat
+= ListT (runListT m $\hbind$ return)
+= m
+
+-- ?mapM_and_concat: mapM (return $\circ$ wrap) xs $\hbind$ return $\circ$ concat = return xs
+-- base case
+   mapM (return $\circ$ wrap) [] $\hbind$ return $\circ$ concat
+= return []
+-- inductive case
+   mapM (return $\circ$ wrap) (x:xs) $\hbind$ return $\circ$ concat
+= (return [x] $\hbind$ $\lambda$x$'$ $\to$ mapM (return $\circ$ wrap) xs $\hbind$ $\lambda$xs$'$ $\to$ return (x$'$:xs$'$)) $\hbind$ return $\circ$ concat
+= (mapM (return $\circ$ wrap) xs $\hbind$ $\lambda$xs$'$ $\to$ return ([x]:xs$'$)) $\hbind$ return $\circ$ concat
+-- m is a monad
+= (mapM (return $\circ$ wrap) xs $\hbind$ $\lambda$xs$'$ $\to$ return ([x]:xs$'$)) $\hbind$ return $\circ$ concat
+-- m is a monad
+= mapM (return $\circ$ wrap) xs $\hbind$ $\lambda$xs$'$ $\to$ return ([x]:xs$'$) $\hbind$ return $\circ$ concat
+= mapM (return $\circ$ wrap) xs $\hbind$ $\lambda$xs$'$ $\to$ return (concat ([x]:xs$'$))
+= mapM (return $\circ$ wrap) xs $\hbind$ $\lambda$xs$'$ $\to$ return ([x] $\happend$ concat xs$'$)
+-- m is a monad
+= mapM (return $\circ$ wrap) xs $\hbind$ $\lambda$xs$'$ $\to$ return (concat xs$'$) $\hbind$ $\lambda$ys $\to$ return ([x] $\happend$ ys)
+-- m is a monad
+= mapM (return $\circ$ wrap) xs $\hbind$ return $\circ$ concat $\hbind$ $\lambda$ys $\to$ return ([x] $\happend$ ys)
+-- induction hypothesis
+= return xs $\hbind$ $\lambda$ys $\to$ return ([x] $\happend$ ys)
+= return ([x] $\happend$ xs)
+= return (x:xs)
+\end{code}
+\item $(m \hbind f) \hbind g) = m \hbind (\lambda x \to f\, x \hbind g)$
+\end{enumerate}
 \end{document}
 %\definecolor{gray_ulisses}{gray}{0.55}
 %\definecolor{castanho_ulisses}{rgb}{0.71,0.33,0.14}
