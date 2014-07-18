@@ -28,9 +28,7 @@ namespace Env
         -> Env m (MkEff resTy effTy::effs)
 
 data EffElem : (resTy : Type) -> (effTy : Effect) -> List EFFECT -> Type where
-  Here  : (resTy : Type)
-       -> (effTy : Effect)
-       -> EffElem resTy effTy (MkEff resTy effTy::effs)
+  Here  : EffElem resTy effTy (MkEff resTy effTy::effs)
   There : (p : EffElem resTy effTy effs)
        -> EffElem resTy effTy (eff::effs)
 
@@ -44,7 +42,7 @@ updateResTy : (val : a)
            -> (prf : EffElem resTy effTy effs)
            -> (eff : effTy a resTy resTyk)
            -> List EFFECT
-updateResTy {resTyk} val (MkEff resTy effTy::es) (Here resTy effTy) eff =
+updateResTy {resTyk} val (MkEff resTy effTy::es) Here eff =
   MkEff (resTyk val) effTy::es
 updateResTy val (e::es) (There p) eff =
   e::updateResTy val es p eff
@@ -58,19 +56,19 @@ data Eff  : (m : Type -> Type)
   ebind   : Eff m a effs effsk
          -> ((val : a) -> Eff m b (effsk val) effsk')
          -> Eff m b effs effsk'
-  einvoke : EffHandler effTy m
-         => (prf : EffElem resTy effTy effs)
+  einvoke : (prf : EffElem resTy effTy effs)
          -> (eff : effTy a resTy resTyk)
          -> Eff m a effs (\val => updateResTy val effs prf eff)
 
-effexec : EffHandler effTy m
-       => Env m effs
+effexec : Env m effs
        -> (prf : EffElem resTy effTy effs)
        -> (eff : effTy a resTy resTyk)
        -> ((val : a) -> Env m (updateResTy val effs prf eff) -> m r)
        -> m r
-effexec (res::ress) (Here resTy effTy) eff k = ?exec0_1
-effexec (res::ress) (There p) eff k = ?exec0_2
+effexec (res::ress) Here eff k =
+  handle res eff (\val, res' => k val (res'::ress))
+effexec (res::ress) (There p) eff k =
+  effexec ress p eff (\val, ress' => k val (res::ress'))
 
 effint : Env m effs
       -> Eff m a effs effsk
@@ -82,3 +80,46 @@ effint env (ebind m f) k =
   effint env m (\val, env' => effint env' (f val) k)
 effint env (einvoke prf eff) k =
   effexec env prf eff k
+
+---------------------------- effect tests ---------------------------------
+
+return : a -> Eff m a effs (\val => effs)
+return = evalue
+
+(>>=) : Eff m a effs effsk
+     -> ((val : a) -> Eff m b (effsk val) effsk')
+     -> Eff m b effs effsk'
+(>>=) = ebind
+
+data State : Effect where
+  Get : State s s (\s_ => s)
+  Put : s -> State () s (\s_ => s)
+
+STATE : Type -> EFFECT
+STATE s = MkEff s State
+
+instance EffHandler State m where
+  handle s Get      k = k s  s
+  handle s (Put s') k = k () s'
+
+get : Eff m s [STATE s] (\val => [STATE s])
+get = einvoke Here Get
+
+put : s -> Eff m () [STATE s] (\val => [STATE s])
+put s = einvoke Here (Put s)
+
+testState : Eff m Int [STATE Int] (\val => [STATE Int])
+testState = do
+  put 5
+  n <- get
+  put (n * 3)
+  return (n+1)
+
+runTest : (Show s, Show a) => Eff IO a [STATE s] (\val => [STATE s]) -> s -> IO a
+runTest eff s = effint [s] eff (\a, envs => do
+                  putStr "Computation ended with state "
+                  let [s'] = envs
+                  print s'
+                  putStr "Value: "
+                  print a
+                  return a)
