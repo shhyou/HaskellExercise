@@ -3,7 +3,7 @@
 \usepackage[fleqn]{amsmath}
 \usepackage{amsfonts}
 \usepackage{amssymb}
-\usepackage[margin=2.5cm]{geometry}
+\usepackage[margin=1cm]{geometry}
 
 \usepackage{listings}
 \usepackage[usenames,dvipsnames,svgnames,table]{xcolor}
@@ -31,7 +31,7 @@
 \makeatother
 
 \lstdefinelanguage{HaskellUlisses} {
-	basicstyle=\linespread{1.2}\selectfont,
+	basicstyle=\linespread{1.2}\selectfont\small,
 	columns=fullflexible,     %%
 	keepspaces=true,          %%
 	identifierstyle=\idstyle, %%
@@ -179,5 +179,41 @@ monad laws:
 = return (x:xs)
 \end{code}
 \item $(m \hbind f) \hbind g) = m \hbind (\lambda x \to f\, x \hbind g)$
+\begin{code}
+   (m $\hbind$ f) $\hbind$ g
+= ListT (runListT m $\hbind$ mapM (runListT $\circ$ f) $\hbind$ return $\circ$ concat) $\hbind$ g
+= ListT ((runListT m $\hbind$ mapM (runListT $\circ$ f) $\hbind$ return $\circ$ concat) $\hbind$ mapM (runListT $\circ$ g) $\hbind$ return $\circ$ concat)
+= {- TODO -}
+= ListT (runListT m $\hbind$ mapM (runListT $\circ$ ($\lambda$x $\to$ f x $\hbind$ g)) $\hbind$ return $\circ$ concat)
+= m $\hbind$ $\lambda$x $\to$ f x $\hbind$ g
+
+{- ?lem_if_m_commute1:
+       mapM f (xs $\happend$ ys)
+    = mapM f xs $\hbind$ $\lambda$xs$'$ $\to$ mapM f ys $\hbind$ $\lambda$ys$'$ $\to$ return (xs$'$ $\happend$ ys$'$)
+ -}
+-- base case
+-- inductive case
+
+{- ?lem_if_m_commute2:
+        mapM (runListT $\circ$ f) xs $\hbind$ return $\circ$ concat $\hbind$ mapM (runListT $\circ$ g)
+     = mapM (runListT $\circ$ ($\lambda$x $\to$ f x $\hbind$ g)) xs
+ -}
+-- base case
+   mapM (runListT $\circ$ f) [] $\hbind$ return $\circ$ concat $\hbind$ mapM (runListT $\circ$ g)
+= return []
+= mapM (runListT $\circ$ ($\lambda$x $\to$ f x $\hbind$ g)) xs
+-- inductive case
+   mapM (runListT $\circ$ f) (x:xs) $\hbind$ return $\circ$ concat $\hbind$ mapM (runListT $\circ$ g)
+= (runListT (f x) $\hbind$ $\lambda$x$'$ $\to$ mapM (runListT $\circ$ f) xs $\hbind$ $\lambda$xs$'$ $\to$ return (x$'$:xs$'$)) $\hbind$ return $\circ$ concat $\hbind$ mapM (runListT $\circ$ g)
+-- m is a monad
+= runListT (f x) $\hbind$ $\lambda$x$'$ $\to$ mapM (runListT $\circ$ f) xs $\hbind$ $\lambda$xs$'$ $\to$ return (x$'$:xs$'$) $\hbind$ return $\circ$ concat $\hbind$ mapM (runListT $\circ$ g)
+= runListT (f x) $\hbind$ $\lambda$x$'$ $\to$ mapM (runListT $\circ$ f) xs $\hbind$ $\lambda$xs$'$ $\to$ return (x$'$ $\happend$ concat xs$'$) $\hbind$ mapM (runListT $\circ$ g)
+-- m is a monad
+= runListT (f x) $\hbind$ $\lambda$x$'$ $\to$ mapM (runListT $\circ$ f) xs $\hbind$ $\lambda$xs$'$ $\to$ return (concat xs$'$) $\hbind$ $\lambda$ys $\to$ return (x$'$ $\happend$ ys) $\hbind$ mapM (runListT $\circ$ g)
+= runListT (f x) $\hbind$ $\lambda$x$'$ $\to$ mapM (runListT $\circ$ f) xs $\hbind$ $\lambda$xs$'$ $\to$ return (concat xs$'$) $\hbind$ $\lambda$ys $\to$ mapM (runListT $\circ$ g) (x$'$ $\happend$ ys)
+= runListT (f x) $\hbind$ $\lambda$x$'$ $\to$ mapM (runListT $\circ$ f) xs $\hbind$ return $\circ$ concat $\hbind$ $\lambda$ys $\to$ mapM (runListT $\circ$ g) (x$'$ $\happend$ ys)
+-- m is commutative
+= mapM (runListT $\circ$ f) xs $\hbind$ return $\circ$ concat $\hbind$ $\lambda$ys $\to$ runListT (f x) $\hbind$ $\lambda$x$'$ $\to$ mapM (runListT $\circ$ g) (x$'$ $\happend$ ys)
+\end{code}
 \end{enumerate}
 \end{document}
