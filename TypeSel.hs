@@ -1,48 +1,79 @@
-{-# LANGUAGE GADTs, RankNTypes, ScopedTypeVariables, DeriveFunctor, StandaloneDeriving #-}
+{-# LANGUAGE GADTs, RankNTypes, ScopedTypeVariables, DeriveFunctor
+           , StandaloneDeriving, FlexibleContexts, FlexibleInstances
+           , OverlappingInstances, MultiParamTypeClasses, KindSignatures
+           , IncoherentInstances #-} -- evil
 
 import Control.Monad (liftM)
 import Control.Monad.Identity
+import Control.Monad.Trans (MonadTrans(), lift)
 
 data FreeT m f a where
-  Pure' :: a -> FreeT m f a
+  Pure :: a -> FreeT m f a
   Impure :: (f (m (FreeT m f a))) -> FreeT m f a
 
 instance (Monad m, Functor f) => Monad (FreeT m f) where
-  return = Pure'
-  (Pure' x) >>= k   = k x
+  return = Pure
+  (Pure x) >>= k   = k x
   (Impure f) >>= k = Impure (fmap (liftM (>>= k)) f)
 
-data TickF m a where
-  Pure :: a -> TickF m a
-  Tick :: m (TickF m a) -> TickF m a
-  Count :: (Int -> m (TickF m a)) -> TickF m a
+liftF :: (Monad m, Functor f) => f a -> FreeT m f a
+liftF = Impure . fmap (return . Pure)
 
-instance Monad m => Monad (TickF m) where
-  return = Pure
-  (Pure x)  >>= k = k x
-  (Tick m)  >>= k = Tick (liftM (>>= k) m)
-  (Count f) >>= k = Count ((liftM (>>= k)) . f)
+data TickF p a where
+  Tick :: a -> TickF p a
+  Count :: (Int -> a) -> TickF p a
 
-runTick :: Monad m => TickF m a -> m a
-runTick = runTick' 0 where
-  runTick' :: Monad m => Int -> TickF m a -> m a
-  runTick' c (Pure x)  = return x
-  runTick' c (Tick m)  = m >>= runTick' (c+1)
-  runTick' c (Count f) = f c >>= runTick' c
+data Named p = Named
 
-tick :: Monad m => TickF m ()
-tick = Tick (return $ Pure ())
+data Either1 a b t = Left1 (a t) | Right1 (b t)
 
-count :: Monad m => TickF m Int
-count = Count (return . Pure)
+class    Functor fs => Mem f (fs :: * -> *) where inj :: f a -> fs a
+instance Mem (TickF p) (Either1 (TickF p) (TickF q)) where inj = Left1
+instance Mem (TickF p) (Either1 (TickF q) (TickF p)) where inj = Right1
 
-test1 :: Monad m => TickF m Int
-test1 = do
-  () <- tick
-  () <- tick
-  () <- tick
-  n <- count
+tick :: forall m p fs. (Monad m, Mem (TickF p) fs) => Named p -> FreeT m fs ()
+tick Named = liftF (inj (Tick () :: TickF p ()))
+
+count :: forall m p fs. (Monad m, Mem (TickF p) fs) => Named p -> FreeT m fs Int
+count Named = liftF (inj (Count id :: TickF p Int))
+
+test1 :: (Monad m, Mem (TickF p) fs) => Named p -> FreeT m fs Int
+test1 cnt = do
+  () <- tick cnt
+  () <- tick cnt
+  () <- tick cnt
+  n <- count cnt
   return (n*2 + 1)
 
-deriving instance Functor m => Functor (TickF m)
+test2 :: (Monad m, Mem (TickF p) fs) => Named p -> FreeT m fs Int
+test2 cnt = do
+  () <- tick cnt
+  count cnt
+
+tests :: (Monad m, Mem (TickF p) fs, Mem (TickF q) fs)
+      => Named p
+      -> Named q
+      -> FreeT m fs (Int, Int)
+tests cnt1 cnt2 = do
+  test1 cnt1
+  test2 cnt2
+  n1 <- count cnt1
+  n2 <- count cnt2
+  return (n1, n2)
+
+runTicks :: Monad m
+        => (forall p q. Named p -> Named q -> FreeT m (Either1 (TickF p) (TickF q)) a)
+        -> m a
+runTicks f = loop 0 0 (f Named Named) where
+  loop nl nr (Pure x) = return x
+  loop nl nr (Impure (Left1   (Tick k))) = k >>= loop (nl + 1) nr
+  loop nl nr (Impure (Left1  (Count k))) = k nl >>= loop nl nr
+  loop nl nr (Impure (Right1  (Tick k))) = k >>= loop nl (nr + 1)
+  loop nl nr (Impure (Right1 (Count k))) = k nr >>= loop nl nr
+
+res :: (Int, Int)
+res = runIdentity (runTicks tests)
+
+deriving instance (Functor a, Functor b) => Functor (Either1 a b)
+deriving instance Functor (TickF p)
 deriving instance (Functor m, Functor f) => Functor (FreeT m f)
