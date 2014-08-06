@@ -1,0 +1,4 @@
+rem http://stackoverflow.com/questions/5053149/sml-nj-how-to-compile-standalone-executable
+
+call ml-build directeval.cm DirectEval.main direval
+call sml @SMLload direval.x86-win32
