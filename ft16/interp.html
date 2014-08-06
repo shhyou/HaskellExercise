@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html class="remark-container"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+    <title>Interpreters in FLOLAC'14</title>
+    <link rel="stylesheet" href="./res/style.css">
+    <script src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML&amp;delayStartupUntil=configured" type="text/javascript"></script>
+  </head>
+  <body class="remark-container">
+    <textarea id="source" style="display: none;">name: inverse
+class: inverse, center, middle, front-page
+layout: true
+---
+# Interpreters, FLOLAC'14
+
+.right[Unofficial / [suhorng](https://github.com/suhorng/)]
+
+.left[.footnote[This slide: ]]
+---
+layout: false
+# $\lambda$ the ultimate
+- The syntax
+\\[\\begin{aligned}
+v \;\; ::&amp;= \;\; \lambda x.\, e \\\\
+\\\\
+e \;\; ::&amp;= \;\; x, y, z, \dots \\\\
+&amp;| \;\;\;\; \lambda x.\, e \\\\
+&amp;| \;\;\;\; e\_1\, e_2  
+\\end{aligned}\\]
+
+<br/>
+- In Standard ML,
+
+```ocaml
+datatype expr = VAR of string
+              | LAM of string * expr
+              | AP  of expr * expr
+```
+---
+# And the magic computations!
+- Recall: value
+\\[ \frac{}{(\lambda x.\, M)\, \mathbf{val}} \text{ (fun-v)} \\]
+
+- Call-by-value small-step semantics
+\\[ \frac{N\, \mathbf{val}}{(\lambda x.\, M)\,N \mapsto M[N/x]} \text{ (app)} \\]
+\\[ \frac{M \mapsto M'}{M\,N \mapsto M'\, N} \text{ (app-l)} \\]
+\\[ \frac{N \mapsto N'}{(\lambda x. M)\,N \mapsto (\lambda x. M)\, N'} \text{ (app-r)} \\]
+---
+# Judgments
+
+XXX TODO
+---
+# An evaluator, please!
+<br/>
+- That's simple, I can make it!
+
+```ocaml
+datatype value = FN (value -> value)
+```
+
+```ocaml
+fun eval gamma (VAR x) = Env.lookup x gamma
+  | eval gamma (LAM (x, e)) = FN (fn v => eval (Env.extend x v gamma) e)
+  | eval gamma (AP (e1, e2)) =
+      let val (FN f, v) = (eval gamma e1, eval gamma e2)
+      in  f v  end
+```
+---
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+# .center[The two are quite different, so what?]
+---
+# A CBV small-step semantics interpreter
+- They are actually not that unrelated
+---
+# And the usual interpreter is...
+- Oops, not what we have learnt
+---
+# This is a common big-step semantics
+---
+# Simply Typed $\lambda$-Calculus
+---
+# Type checking a term
+- Derivation tree is the call-stack!
+---
+# All are interpreters!
+    </textarea>
+    <script src="./res/remark-0.6.0.min.js" type="text/javascript"></script>
+    <script src="./res/highlight.pack.js"></script>
+    <script type="text/javascript">
+      /* override default hljs engine to provide Haskell syntax highlight */
+      remark.highlighter.engine = hljs;
+      var slideshow = remark.create({
+        highlightStyle: 'ir_black'
+      });
+      MathJax.Hub.Config({
+        "HTML-CSS": { scale: 75 },
+        tex2jax: {
+          skipTags: ['code', 'script', 'noscript', 'style' ,'textarea', 'pre'],
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['\\[', '\\]']]
+        }
+      });
+      MathJax.Hub.Configured();
+    </script>
+    <div class="remark-notes-area">hello world</div>
+</body></html>

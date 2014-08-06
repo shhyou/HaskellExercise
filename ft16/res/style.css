@@ -1,0 +1,165 @@
+@import url(http://fonts.googleapis.com/css?family=Droid+Serif);
+@import url(http://fonts.googleapis.com/css?family=Oxygen);
+@import url(http://fonts.googleapis.com/css?family=Josefin+Sans);
+@import url(http://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+body {
+  font-family: 'Oxygen';
+  font-size: 26px;
+}
+h1, h2, h3 {
+  font-family: 'Oxygen';
+  font-weight: 400;
+  margin-bottom: 0;
+}
+h1 { font-size: 1.4em; line-height: 1.25em; }
+h2 { font-size: 1.25em; }
+h3 { font-size: 1.14em; }
+.footnote {
+  font-size: 0.8em;
+  position: absolute;
+  bottom: 3em;
+}
+li p { line-height: 1.25em; }
+a, a > code {
+  color: rgb(249, 38, 114);
+  text-decoration: none;
+}
+code {
+  -moz-border-radius: 5px;
+  -web-border-radius: 5px;
+  background: #e7e8e2;
+  border-radius: 5px;
+  font-size: 0.8em;
+  padding: 3px;
+}
+pre > code {
+  font-size: 0.57em;
+}
+table {
+  line-height: 1.5em;
+  margin: 0.3em;
+}
+table thead { background: #eeeeee;}
+table tbody tr:nth-child(odd) { background: #ffffdd; }
+th, td {
+  padding: 3px 13px 3px 13px;
+  border: 1px solid #88aa88;
+  text-align: center;
+}
+table tr:first-child th:first-child {
+    -moz-border-radius-topleft:10px;
+    -webkit-border-top-left-radius:10px;
+    border-top-left-radius:10px
+}
+table tr:first-child th:last-child {
+    -moz-border-radius-topright:10px;
+    -webkit-border-top-right-radius:10px;
+    border-top-right-radius:10px
+}
+table tr:last-child td:first-child {
+    -moz-border-radius-bottomleft:10px;
+    -webkit-border-bottom-left-radius:10px;
+    border-bottom-left-radius:10px
+}
+table tr:last-child td:last-child {
+    -moz-border-radius-bottomright:10px;
+    -webkit-border-bottom-right-radius:10px;
+    border-bottom-right-radius:10px
+}
+.pull-left {
+  float: left;
+  width: 47%;
+}
+.pull-right {
+  float: right;
+  width: 47%;
+}
+.pull-right ~ p {
+  clear: both;
+}
+#slideshow .slide .content code {
+  font-size: 0.8em;
+}
+#slideshow .slide .content pre code {
+  font-size: 0.9em;
+  padding: 15px;
+}
+.inverse {
+  background: #272822;
+  color: #777872;
+  text-shadow: 0 0 20px #333;
+}
+.black { background: #000000; }
+.inverse h1, .inverse h2 {
+  font-family: 'Josefin Sans';
+  font-weight: 400;
+  margin-bottom: 0;
+  color: #f3f3f3;
+  line-height: 0.8em;
+}
+.front-page h1 { font-size: 2.5em; }
+/* Slide-specific styling */
+#slide-inverse .footnote {
+  bottom: 12px;
+  left: 20px;
+}
+/* Two-column layout */
+.left-column {
+  color: #777;
+  width: 25%;
+  height: 92%;
+  float: left;
+}
+.left-column h2:last-of-type, .left-column h3:last-child {
+  color: #000;
+}
+.right-column {
+  width: 73%;
+  float: right;
+  padding-top: 1em;
+}
+.float-right {
+  float: right;
+}
+.bold {
+  font-weight: bold;
+}
+.delete {
+  text-decoration: line-through;
+}
+.bigger {
+  font-size: 110%;
+  line-height: 160%;
+}
+.blackbox {
+  padding: 10px;
+  border: 1.3px solid rgb(0,0,0);
+}
+.greenbbox {
+  padding: 3px;
+  border: 2px solid rgb(0,255,0);
+}
+.bluebbox {
+  padding: 3px;
+  border: 2px solid rgb(0,0,255);
+}
+.redbbox {
+  padding: 3px;
+  border: 2px solid rgb(255,0,0);
+}
+.yellowbg { 
+  background-color: rgb(255, 255, 33);
+}
+.yellowblk {
+  background-color: rgb(255, 255, 33);
+  display: block;
+}
+.comment {
+  color: rgb(0, 112, 213);
+  font-weight: bold;
+}
+.red { color: #fa0000; }
+.green { color: #33ff33; }
+.grey { color: rgb(120, 120, 120); }
+.large { font-size: 2em; }
+.small { font-size: 0.6em; }
