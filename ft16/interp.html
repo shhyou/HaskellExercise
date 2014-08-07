@@ -11,19 +11,60 @@ layout: true
 ---
 # Interpreters, FLOLAC'14
 
-.right[Unofficial / [suhorng](https://github.com/suhorng/)]
+.right[unofficial / [suhorng](https://github.com/suhorng/)]
 
-.left[.footnote[This slide: ]]
+.left[.footnote[This slide: [FT16](https://suhorng.github.io/HaskellExercise/ft16/interp.html)]]
 ---
 layout: false
+# FLOLAC'14
+http://flolac.iis.sinica.edu.tw/flolac14/doku.php?id=zh-tw:start
+
+- Functional Programming, Dependently Typed Programming
+
+- Logic and Type Theory
+
+- Operational Semantics
+
+- Denotational Semantics
+
+- Lectures on Domain Specific Language
+---
+# And the derivation trees...
+- Typings
+\\[
+\dfrac
+{\dfrac
+  {\dfrac{}{- \vdash f : \mathbb{N} \to a} \text{ (var)} \qquad \dfrac{}{- \vdash 3 : \mathbb{N}} \text{ (nat)}}
+  {-, f : \mathbb{N} \to a \vdash f\, 3 : a} \text{ (app)}}
+{ \vdash \lambda f.\, f\, 3 : (\mathbb{N} \to a) \to a} \text{ (abs)}
+\\]
+
+- Operational Semantics
+\\[
+\dfrac
+{\dfrac
+  {(\lambda z. z)\, 5 \mapsto z[5 / z]}
+  {(\lambda x\, y. x) ((\lambda z. z)\, 5) \mapsto (\lambda x\, y. x)\, 5}}
+{(\lambda x\, y. x) ((\lambda z. z)\, 5)\, 3 \mapsto (\lambda x\, y. x)\, 5\, 3}
+\\]
+
+- Denotational Semantics
+
+    $[\\![ \mathtt{x} ]\\!] \rho = \rho(\mathtt{x}) $<br/>
+    $[\\![ \mathtt{\lambda\, x.e} ]\\!] \rho = f$ where $f(x) = [\\![ \mathtt{e} ]\\!] \rho'$ and $\rho' = \rho [\mathtt{x} \mapsto x]$<br/>
+    $[\\![ \mathtt{e1\, e2} ]\\!] \rho = ([\\![ \mathtt{e1} ]\\!] \rho)\, ([\\![ \mathtt{e2} ]\\!] \rho)$
+
+---
 # $\lambda$ the ultimate
 - The syntax
 \\[\\begin{aligned}
 v \;\; ::&amp;= \;\; \lambda x.\, e \\\\
+&amp;| \;\;\;\;\; \mathbb{N}
 \\\\
 e \;\; ::&amp;= \;\; x, y, z, \dots \\\\
 &amp;| \;\;\;\; \lambda x.\, e \\\\
-&amp;| \;\;\;\; e\_1\, e_2  
+&amp;| \;\;\;\; e\_1\, e_2 \\\\
+&amp;| \;\;\;\; e\_1 + e\_2
 \\end{aligned}\\]
 
 <br/>
@@ -33,11 +74,14 @@ e \;\; ::&amp;= \;\; x, y, z, \dots \\\\
 datatype expr = VAR of string
               | LAM of string * expr
               | AP  of expr * expr
+              | NUM of int
+              | ADD of expr * expr
 ```
 ---
 # And the magic computations!
 - Recall: value
 \\[ \frac{}{(\lambda x.\, M)\, \mathbf{val}} \text{ (fun-v)} \\]
+\\[ \frac{n \in \mathbb{N}}{n\, \mathbf{val}} \text{ (nat-v)} \\]
 
 - Call-by-value small-step semantics
 \\[ \frac{N\, \mathbf{val}}{(\lambda x.\, M)\,N \mapsto M[N/x]} \text{ (app)} \\]
@@ -53,7 +97,8 @@ XXX TODO
 - That's simple, I can make it!
 
 ```ocaml
-datatype value = FN (value -> value)
+datatype value = FN of (value -> value)
+               | N  of int
 ```
 
 ```ocaml
@@ -62,6 +107,10 @@ fun eval gamma (VAR x) = Env.lookup x gamma
   | eval gamma (AP (e1, e2)) =
       let val (FN f, v) = (eval gamma e1, eval gamma e2)
       in  f v  end
+  | eval gamma (NUM n) = N n
+  | eval gamma (ADD (e1, e2)) =
+      let val (N n, N m) = (eval gamma e1, eval gamma e2)
+      in  N (n+m) end
 ```
 ---
 <br/>
