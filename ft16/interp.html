@@ -51,7 +51,7 @@ http://flolac.iis.sinica.edu.tw/flolac14/doku.php?id=zh-tw:start
 - Denotational Semantics
 
     $[\\![ \mathtt{x} ]\\!] \rho = \rho(\mathtt{x}) $<br/>
-    $[\\![ \mathtt{\lambda\, x.e} ]\\!] \rho = f$ where $f(x) = [\\![ \mathtt{e} ]\\!] \rho'$ and $\rho' = \rho [\mathtt{x} \mapsto x]$<br/>
+    $[\\![ \mathtt{lambda\, x.e} ]\\!] \rho = f$ where $f(x) = [\\![ \mathtt{e} ]\\!] \rho'$ and $\rho' = \rho [\mathtt{x} \mapsto x]$<br/>
     $[\\![ \mathtt{e1\, e2} ]\\!] \rho = ([\\![ \mathtt{e1} ]\\!] \rho)\, ([\\![ \mathtt{e2} ]\\!] \rho)$
 
 ---
@@ -78,7 +78,8 @@ datatype expr = VAR of string
               | ADD of expr * expr
 ```
 ---
-# And the magic computations!
+name: smallstep
+# And the magic computations! .small[[evaluator](#smallstepeval)]
 - Recall: value
 \\[ \frac{}{(\lambda x.\, M)\, \mathbf{val}} \text{ (fun-v)} \\]
 \\[ \frac{n \in \mathbb{N}}{n\, \mathbf{val}} \text{ (nat-v)} \\]
@@ -88,9 +89,30 @@ datatype expr = VAR of string
 \\[ \frac{M \mapsto M'}{M\,N \mapsto M'\, N} \text{ (app-l)} \\]
 \\[ \frac{N \mapsto N'}{(\lambda x. M)\,N \mapsto (\lambda x. M)\, N'} \text{ (app-r)} \\]
 ---
-# Judgments
+# Judgments and Derivations
+- A judgment, $J$, could be of form $\text{TERM}\, \mathbf{val}$ or $\Gamma \vdash e : t$. There might also be variables.
 
-XXX TODO
+- This is an example inference rule
+\\[ \dfrac{J_1\; J_2\; \cdots\; J_m}{J} \text{ (rule name)} \\]
+where the $J$s are judgments
+
+- Inference rules are combined to get a derivation tree
+
+\\[
+\dfrac
+{
+  \dfrac
+  {
+    \dfrac
+    {5\, \mathbf{val}}
+    {(\lambda z. z)\, 5 \mapsto z[5 / z]}
+    \text{ (app)}}
+  {(\lambda x\, y. x) ((\lambda z. z)\, 5) \mapsto (\lambda x\, y. x)\, 5}
+  \text{ (app-r)}}
+{(\lambda x\, y. x) ((\lambda z. z)\, 5)\, 3 \mapsto (\lambda x\, y. x)\, 5\, 3}
+\text{ (app-l)}
+\\]
+
 ---
 # An evaluator, please!
 <br/>
@@ -123,20 +145,115 @@ fun eval gamma (VAR x) = Env.lookup x gamma
 <br/>
 # .center[The two are quite different, so what?]
 ---
-# A CBV small-step semantics interpreter
+name: smallstepeval
+# A CBV small-step semantics interpreter .small[[sema](#smallstep)]
 - They are actually not that unrelated
+
+```ocaml
+(* Just a simple substitution, without handling capturing, etc. *)
+(* We do not reduce under lambda, so I hopt it's fine... *)
+fun subst x M (VAR y) = if x = y then M else (VAR y)
+  | subst x M (LAM (y, N)) = LAM (y, if x = y then N else (subst x M N))
+  | subst x M (AP (e1, e2)) = AP (subst x M e1, subst x M e2)
+  | subst x M (NUM n) = NUM n
+  | subst x M (ADD (e1, e2)) = ADD (subst x M e1, subst x M e2)
+```
+
+```ocaml
+fun reduce (VAR x) = raise (ReduceVar x)
+  | reduce (LAM (x,e)) = LAM (x,e)
+  | reduce (AP (LAM (x,e), e2)) =
+      if isValue e2
+      then (subst x e2 e)
+      else AP (LAM (x,e), reduce e2)
+  | reduce (AP (e1, e2)) = AP (reduce e1, e2)
+  | reduce (NUM n) = NUM n
+  | reduce (ADD (NUM n, NUM m)) = NUM (n+m)
+  | reduce (ADD (NUM n, e2)) = ADD (NUM n, reduce e2)
+  | reduce (ADD (e1, e2)) = ADD (reduce e1, e2)
+```
 ---
-# And the usual interpreter is...
+name: bigstepeval
+# And the usual interpreter is... .small[[sema](#bigstep)]
 - Oops, not what we have learnt
+
+```ocaml
+datatype value = FN of (value -> value)
+               | N  of int
+```
+
+```ocaml
+fun eval gamma (VAR x) = Env.lookup x gamma
+  | eval gamma (LAM (x, e)) = FN (fn v => eval (Env.extend x v gamma) e)
+  | eval gamma (AP (e1, e2)) =
+      let val (FN f, v) = (eval gamma e1, eval gamma e2)
+      in  f v  end
+  | eval gamma (NUM n) = N n
+  | eval gamma (ADD (e1, e2)) =
+      let val (N n, N m) = (eval gamma e1, eval gamma e2)
+      in  N (n+m) end
+```
 ---
-# This is a common big-step semantics
+# This is for the common big-step semantics
+- Semantics
+    * NOT handling divergence
+
+.center[$\dfrac{n\in\mathbb{N}}{n \Downarrow n}$
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+$\dfrac{M \Downarrow \lambda x.e \qquad N \Downarrow N' \qquad M'[N' / x] \Downarrow V}{M\, N \Downarrow V}$]
+<br/>
+.center[$\dfrac{}{\lambda x.e \Downarrow \lambda x.e}$
+&nbsp;&nbsp;&nbsp;
+$\dfrac{M \Downarrow m \qquad N \Downarrow n}{M+N \Downarrow m+n}$]
+
+- Interpreter
+
+```ocaml
+fun step (VAR x) = raise (ReduceVar x)
+  | step (LAM (x, e)) = LAM (x, e)
+  | step (AP (e1, e2)) = let val LAM (x, e) = step e1
+                             val v = step e2
+                         in  (step (subst x v e)) end
+  | step (NUM n) = NUM n
+  | step (ADD (e1, e2)) = let val (NUM n1) = step e1
+                              val (NUM n2) = step e2
+                          in  (NUM (n1 + n2)) end
+```
+
 ---
-# Simply Typed $\lambda$-Calculus
----
-# Type checking a term
-- Derivation tree is the call-stack!
+name: bigstep
+# A modified big-step semantics .small[[evaluator](#bigstepeval)]
+<br/>
+<br/>
+.center[$\dfrac
+{n \in \mathbb{N}}
+{\Gamma \vdash n \Downarrow n}$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$\dfrac
+{(x,V) \in \Gamma}
+{\Gamma \vdash x \Downarrow V}$]
+<br/>
+<br/>
+.center[$\dfrac
+{\Gamma \vdash M \Downarrow m
+ \qquad
+ \Gamma \vdash N \Downarrow n}
+ {\Gamma \vdash M+N \Downarrow m+n}$]
+<br/>
+<br/>
+.center[$\dfrac
+{\Gamma \vdash M \Downarrow (\lambda x. M')
+ \qquad
+ \Gamma \vdash N \Downarrow N'
+ \qquad
+ \Gamma, (x, N') \vdash M' \Downarrow V}
+{\Gamma \vdash M\, N \Downarrow V}$]
 ---
 # All are interpreters!
+- Type checking also looks like an interpreter
+    * And there is a context $\Gamma$
+
+- For dependently typed languages... you realy need to evaluate the terms!
+
+- From these semantics we can get various abstract machines
     </textarea>
     <script src="./res/remark-0.6.0.min.js" type="text/javascript"></script>
     <script src="./res/highlight.pack.js"></script>
