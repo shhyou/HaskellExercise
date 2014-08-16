@@ -5,3 +5,9 @@
 *.aux
 *.pdf
 *.gz
+*~
+#*#
+*.agdai
+*.ibc
+*.bak
+
