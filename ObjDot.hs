@@ -1,7 +1,6 @@
 module ObjDot where
 
-the :: a -> (a -> b) -> b
-the = flip ($)
+the = flip id
 
 test :: [(Int,Int,Int)]
 test =
