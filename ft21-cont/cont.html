@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html class="remark-container"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+    <title>First-Class Computation: Continuation</title>
+    <link rel="stylesheet" href="./style.css">
+    <script src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML&amp;delayStartupUntil=configured" type="text/javascript"></script>
+  </head>
+  <body class="remark-container">
+<textarea id="source" style="display: none;">
+class: inverse, middle, center, title
+# .large[.delete[.blue[Kontinyueshon]] .green[Continuation]]<br><br>the Ultimate .red[GOTO]
+.center[.small[[suhorng](https://github.com/suhorng)]]
+---
+layout: none
+# GO TO
+
+- [A Brief, Incomplete, and Mostly Wrong History of Programming Languages](http://james-iry.blogspot.tw/2009/05/brief-incomplete-and-mostly-wrong.html)
+
+    > **1964** - John Kemeny and Thomas Kurtz create BASIC, an unstructured programming language for non-computer scientists.
+
+    > **1965** - Kemeny and Kurtz go to 1964.
+
+---
+# A "Goto" with Context
+- *Jump!*
+
+```cpp
+
+void dfs(int u) {
+  for (int i = 0; i != deg[u]; ++i) {
+    int v = edges[u][i];
+    if (!vst[v]) {
+      vst[v] = true;
+      dfs(v);
+    }
+  }
+}
+```
+
+- Make it a loop!
+---
+# A "Goto" with Context
+- `GOTO` is insufficient
+
+```cpp
+struct frame_t { int u, i, addr; };
+void dfs2(int u) {
+  vector<frame_t> stk;
+  stk.push_back({u, 0, -1});
+call:
+  for (; stk.back().i != deg[stk.back().u]; ++stk.back().i) {
+    int v; v = edges[stk.back().u][stk.back().i];
+    if (!vst[v]) {
+      vst[v] = true;
+      stk.push_back({v, 0, 1});
+      goto call;
+ret1:;
+    }
+  }
+ret2:
+  switch (stk.back().addr) {
+    case 1: stk.pop_back(); goto ret1;
+  }
+}
+```
+---
+# A "Goto" with Context
+- Time for the .green[Continuation]!
+
+    * The rest of the computation
+
+$\hphantom{\leadsto} \mathtt{let}\; x = 5 + 6\times 3\; \mathtt{in}\; f\; (f\; x)$
+
+--
+
+$\leadsto \mathtt{let}\; x = 5 + $.red[$18$]$\; \mathtt{in}\; f\; (f\; x)$
+
+--
+
+$\leadsto \mathtt{let}\; x = $.red[$\text{ }23$]$\; \mathtt{in}\; f\; (f\; x)$
+
+--
+
+$\leadsto f\; (f$.red[$\;23$]$)$
+
+--
+
+$\leadsto f\; ($.red[$???_1$]$)$
+
+--
+
+$\leadsto$ .red[$???_2$]
+
+---
+# A "Goto" with Context
+- Time for the .green[Continuation]!
+
+    * The rest of the computation
+
+$\hphantom{\leadsto} \`\`\mathtt{let}\; x = 5 + $.red[$\text{ }[\;]$]$\; \mathtt{in}\; f\; (f\; x)"$ and $\`\`6\times 3"$
+
+$\hphantom{\leadsto} \`\`\mathtt{let}\; x = $.red[$\text{ }[\;]$]$\; \mathtt{in}\; f\; (f\; x)"$ and $\`\`5+18"$
+
+$\hphantom{\leadsto}\`\`"$ and $\`\`\mathtt{let}\; x = 23\; \mathtt{in}\; f\; (f\; x)"$
+
+$\hphantom{\leadsto} \`\`f\; ($.red[$[\;]$]$)"$ and $\`\`f\; 23"$
+
+$\hphantom{\leadsto}\`\`"$ and $\`\`f\; ???_1"$ 
+---
+# A "Goto" with Context
+
+.center[$\`\`E[R] := 1 + 2\times (f\; x)"$]
+
+- The program can be decomposed into two parts
+
+    * Current computation, or a $\`\`$redex$"$
+
+        + $R := (f\; x)$
+
+    * Rest of the computation, the $\`\`$evalutaion context$"$
+
+        + $E[] := 1 + 2\times\; [\;]$
+---
+# Representation of the continuation
+
+- As a $\`\`$function$"$ (not quite)
+
+- The famous `call/cc` operator
+
+```scheme
+(define fast-product
+  (lambda (xs)
+    (call/cc            ; call/cc is a built-in operator
+     (lambda (k)
+       (letrec
+           ([prod
+             (lambda (xs)
+               (cond
+                [(null? xs) 1]
+                [(zero? (car xs)) (k 0)]
+                [else (* (car xs) (prod (cdr xs)))]))])
+         (prod xs))))))
+```
+---
+# `call/cc` in Scheme
+- What it does
+
+    * Capture the whole $E[\;]$ evaluation context and make it a first-class $\`\`$value$"$
+
+    * When the (captured) continuation is applied, discard the current evalution context and installs the captured one
+
+- Define the abort operator $\mathtt{abort}(M)$ to be
+
+    $E[\mathtt{abort}(M)] \leadsto M$, i.e. abandoning $E[\;]$
+
+- `call/cc` is then
+
+    $E[\mathtt{call/cc}(f)] \leadsto E[f \left(\;\lambda \mathtt{v}.\; \mathtt{abort}(E[\mathtt{v}])\;\right)]$
+---
+# `call/cc` in Scheme
+$\hphantom{\leadsto} 1 + 5\times (\mathtt{call/cc}(\lambda\mathtt{k}.\; 3 - \mathtt{k}(2)))\;\;\;\;\;\;\;\; (= E_1[R_1])$
+.right[$R_1=\mathtt{call/cc}(\lambda\mathtt{k}.\; 3 - \mathtt{k}(2))$<br>$E_1[\;]=1+5\times[\;]$]
+
+--
+
+$\leadsto 1+5\times (3-\mathtt{k}(2))\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\; (= E_2[R_2])$
+.right[$R_2=\mathtt{k}(2)$<br>$E_2[\;]=1+5\times(3-[\;])$<br>$\mathtt{k}=E_1[\;]=1+5\times[\;]$]
+
+--
+
+$\leadsto 1+5\times 2 \;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\;\; (= E_3[R_3])$; $E_1[\;]$ is installed with $[\;]=2$
+.right[$R_3=5\times 2$<br>$E_3[\;]=1+[\;]$]
+
+--
+
+$\leadsto 1+10$
+
+$\leadsto 11$
+---
+# In Meta-language:<br>Continuation-Passing Style (CPS)
+
+- A computation of type `a`:
+
+    * `(a &rightarrow; w) &rightarrow; w`
+
+- Continuation expecting a value of type `a`:
+
+    * A function `a &rightarrow; w`
+
+- A function of type `a &rightarrow; b`:
+
+    * A transformation `(b &rightarrow; w) &rightarrow; (a &rightarrow; w)`, <br>or equivalently `a &rightarrow; (b &rightarrow; w) &rightarrow; w`
+---
+# In Meta-language:<br>Continuation-Passing Style (CPS)
+
+```scheme
+(lambda (f)           ; direct style
+  (lambda (x)
+    (f (f x))))
+```
+
+```scheme
+(lambda (f k0)         ; in CPS
+  (k0 (lambda (x k1)
+        (f x (lambda (v)
+               (f v k1))))))
+```
+
+```javascript
+function(f, k0) {       // in javascript...
+  return k0(function(x, k1) {
+    return f(x, function(v) {
+      return f(v, k1);
+    })
+  });
+}
+```
+---
+# Implementing `call/cc` for CPS programs
+
+```scheme
+(define call/cc       ; the implementatin of call/cc in CPS
+  (lambda (f k)
+    (f (lambda (v k1) ; (i)   capture the continuation `k`
+         (k v))        ; (ii)  when applied, abandon `k1`
+       k)))            ; (iii) `k` for normal return
+```
+
+- An example: $1 + 5\times \mathtt{call/cc}(\lambda\mathtt{k}.\; 3 - \mathtt{k}(2))$
+
+```scheme
+(call/cc              ; in CPS;
+  (lambda (k k2)      ; not the original `call/cc` operator
+     (k 2 (lambda (v)
+             (k2 (- 3 v)))))
+  (lambda (v2)
+     (+ 1 (* 5 v2))))
+```
+
+---
+# CPS Transformation
+
+- Value:
+
+    * $\mathcal{T}(\mathtt{x})=\lambda\mathtt{k}.\; \mathtt{k}\; \mathtt{x}$
+
+- Function:
+
+    * $\mathcal{T}(\lambda\mathtt{x}. \mathtt{e})=\lambda\mathtt{x}.\lambda\mathtt{k}.\; \mathcal{T}(\mathtt{e})\; \mathtt{k}$
+
+- Application:
+
+    * $\mathcal{T}(\mathtt{e}_1\; \mathtt{e}_2)=\mathcal{T}(\mathtt{e}_1)\; \left(\lambda\mathtt{v}_1.\; \mathcal{T}(\mathtt{e}_2)\; (\lambda\mathtt{v}_2.\; \mathtt{v}_1\; \mathtt{v}_2\; \mathtt{k})\right)$
+---
+# Static Single Assignment Form (SSA)
+- Every variable can be assigned once -- one can view it as definition
+
+    ```haskell
+    z  &leftarrow;  x + y
+    b  &leftarrow;  z * 3
+
+    if (b > 0)
+        u  &leftarrow;  5
+    else
+        v  &leftarrow;  2
+
+    w  &leftarrow;  &varphi;(u, v)
+    ...
+    ```
+
+- There is a special $\varphi$ function, combining values from different control paths
+
+---
+# CPS v.s. SSA
+
+```haskell
+z  &leftarrow;  x + y
+b  &leftarrow;  z * 3
+if (b > 0)
+    u  &leftarrow;  5
+else
+    v  &leftarrow;  2
+w  &leftarrow;  &varphi;(u, v)
+...
+```
+
+```scheme
+(let ([k (lambda (w)
+            ...)])
+
+  (+ x y (lambda (z)
+    (* z 3 (lambda (b)
+      (if (> b 0)
+        (k 5)
+        (k 2)))))))
+```
+
+---
+# Others
+
+- CPS/ANF: An intermediate representation in the compiler
+
+    ```scheme
+    (let ([k (lambda (w)
+                ...)])
+    (let ([z (+ x y)])     ; There are no expressions like
+    (let ([b (* z 3)]))    ; (let ([b (* (+ x y) 3)]) ...)
+    (if (> b 0)
+      (k 5)
+      (k 2))))
+    ```
+
+- Delimited continuation (better than undelimited one)
+
+    ```scheme
+    (define (shift f k)   ; (its implementation in CPS)
+      (f (lambda (v k1) (k1 (k v))) ; compose the cont.
+         id))
+
+    (define (reset e k)   ; (its implementation in CPS)
+      (k (e id)))
+    ```
+
+---
+# Others
+
+- continuation &Leftrightarrow; classical logic
+
+- (delimited) continuation &Rightarrow; generator, coroutine, exception
+
+    * They are specialized operations on the continuation
+
+- CPS: Simple syntax &Rightarrow; a good intermediate form
+
+    * <span style="text-decoration: line-through">I shall return</span>There is no $\`\`$return$"$; all are tail calls
+
+    ```
+    v   ::=   x   |   (&lambda; x. e)
+
+    e   ::=   (v1 v2 ...)
+    ```
+
+- Interpreter &Leftrightarrow; CPS &Leftrightarrow; Stack Machine
+</textarea>
+    <script src="./remark-0.6.0.min.js" type="text/javascript"></script>
+    <script src="./highlight.pack.js"></script>
+    <script type="text/javascript">
+      /* override default hljs engine to provide Haskell syntax highlight */
+      remark.highlighter.engine = hljs;
+      var slideshow = remark.create({
+        highlightStyle: 'ir_black'
+      });
+      MathJax.Hub.Config({
+        "HTML-CSS": { scale: 75 },
+        tex2jax: {
+          skipTags: ['code', 'script', 'noscript', 'style' ,'textarea', 'pre'],
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['\\[', '\\]']]
+        }
+      });
+      MathJax.Hub.Configured();
+    </script>
+    <div class="remark-notes-area">hello world</div>
+</body></html>
