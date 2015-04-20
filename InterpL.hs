@@ -2,6 +2,7 @@
 
 data Expr = Int Int
           | Var Int
+          | Add1 Expr
           | Lam Expr
           | Ap Expr Expr
           deriving (Show)
@@ -23,6 +24,10 @@ type Env0 = [() -> Value0]
 interpL0 :: Expr -> Env0 -> Value0
 interpL0 (Int n)    cxt = N0 n
 interpL0 (Var m)    cxt = (cxt!!m) ()
+interpL0 (Add1 e)   cxt =
+  case interpL0 e cxt of
+    N0 i -> N0 (i+1)
+    _ -> error "interpL0: type mismatch"
 interpL0 (Lam e)    cxt = Clos0 (\v -> interpL0 e (v:cxt))
 interpL0 (Ap e1 e2) cxt =
   case interpL0 e1 cxt of 
@@ -44,6 +49,10 @@ type Env1 = [() -> (Value1 -> Value1) -> Value1]
 interpL1 :: Expr -> Env1 -> (Value1 -> Value1) -> Value1
 interpL1 (Int n)    cxt k = k (N1 n)
 interpL1 (Var m)    cxt k = (cxt!!m) () k
+interpL1 (Add1 e)   cxt k =
+  interpL1 e cxt $ \case
+    N1 i -> k (N1 (i+1))
+    _ -> error "interpL1: type mismatch"
 interpL1 (Lam e)    cxt k = k (Clos1 cxt e)
 interpL1 (Ap e1 e2) cxt k =
   interpL1 e1 cxt $ \case 
@@ -60,6 +69,7 @@ instance Show Value2 where
 
 data Cont2 = Id2
            | Apply2 Env2 Expr Cont2
+           | Add12 Cont2
 
 data Thunk2 = Thunk2 Env2 Expr
 
@@ -67,6 +77,8 @@ type Env2 = [Thunk2]
 
 applyL2 :: Cont2 -> (Value2 -> Value2)
 applyL2 Id2               val             = val
+applyL2 (Add12 k)         (N2 i)          = N2 (i+1)
+applyL2 (Add12 _)         _               = error $ "applyL2: type mismatch"
 applyL2 (Apply2 cxt e2 k) (Clos2 cxt' e') = interpL2 e' (Thunk2 cxt e2:cxt') k
 applyL2 (Apply2 _ _ _)    _               = error $ "applyL2: type mismatch"
 
