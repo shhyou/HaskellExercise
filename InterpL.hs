@@ -86,7 +86,8 @@ applyThunk2 :: Thunk2 -> Cont2 -> Value2
 applyThunk2 (Thunk2 cxt e2) k = interpL2 e2 cxt k
 
 interpL2 :: Expr -> Env2 -> Cont2 -> Value2
-interpL2 (Int n) cxt k = applyL2 k (N2 n)
-interpL2 (Lam e) cxt k = applyL2 k (Clos2 cxt e)
-interpL2 (Var m) cxt k = applyThunk2 (cxt!!m) k
+interpL2 (Int n)    cxt k = applyL2 k (N2 n)
+interpL2 (Add1 e)   cxt k = interpL2 e cxt (Add12 k)
+interpL2 (Lam e)    cxt k = applyL2 k (Clos2 cxt e)
+interpL2 (Var m)    cxt k = applyThunk2 (cxt!!m) k
 interpL2 (Ap e1 e2) cxt k = interpL2 e1 cxt (Apply2 cxt e2 k)
