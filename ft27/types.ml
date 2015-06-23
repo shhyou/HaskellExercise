@@ -108,7 +108,41 @@ struct
       | d, LET (x, e1, e2) -> paren (d > 0) ("let " ^ x ^ " = " ^ showe (0, e1) ^ " in " ^ showe (0, e2)) in
     fun e -> showe (0, e)
 
-  let typeinfer e = raise Undefined
+  (* meta type *)
+  type typ = TVAR of metavar ref
+           | TARR of typ * typ
+  and metavar = UNLINK of string | LINK of typ
+
+  let concretize_type (t : typ) : STLC.typ = raise Undefined
+
+  let typeinfer =
+    let fresh_sym =
+      let cnt = ref 0 in
+      fun () -> begin
+        cnt := !cnt + 1;
+        "t" ^ string_of_int (!cnt)
+      end in
+
+    let add_equation (t1, t2) = raise Undefined in
+
+    let rec gen_cons = function
+        cxt, VAR x -> List.assoc x cxt
+      | cxt, LAM (x, e) ->
+          let t = TVAR (ref (UNLINK (fresh_sym ()))) in
+          let t' = gen_cons ((x, t)::cxt, e) in
+          TARR (t, t')
+      | cxt, AP (e1, e2) ->
+          let t1 = gen_cons (cxt, e1) in
+          let t2 = gen_cons (cxt, e2) in
+          let t = TVAR (ref (UNLINK (fresh_sym ()))) in
+          (add_equation (t1, TARR (t2, t));
+           t)
+      | cxt, LET (x, e1, e2) -> gen_cons ((x, gen_cons (cxt, e1))::cxt, e2) in
+    fun e -> raise Undefined
+
+  type typescheme = MONO of typ
+                  | POLY of string list * typ
+  let typeinfer_hm e = raise Undefined
 end
 
 module SystemF : sig
