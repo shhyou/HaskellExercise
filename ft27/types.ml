@@ -131,6 +131,7 @@ struct
   let e0 = TLAM ("A", LAM ("x", TVAR "A", VAR "x"))
   let t0 = TALL ("A", TARR (TVAR "A", TVAR "A"))
 
+  (* let id = /\A. \(x:A). x in id [\/B. B -> B] id *)
   let e3 = LET ("id", TLAM ("A", LAM ("x", TVAR "A", VAR "x")),
                 AP (TAP (VAR "id", TALL ("B", TARR (TVAR "B", TVAR "B"))), VAR "id"))
   let t3 = TALL ("B", TARR (TVAR "B", TVAR "B"))
@@ -148,7 +149,7 @@ module LC : sig
             | LET of string * expr * expr
 
   val expr_to_string : expr -> string
-  val typeinfer : expr -> STLC.expr * STLC.typ
+  val typeinfer : expr -> (STLC.expr * STLC.typ) option
   val test : unit -> unit
 end =
 struct
@@ -196,15 +197,18 @@ struct
         (!equations) in
 
     let solve_equations () =
-      let rec occurs e = false in
+      let rec occurs = function
+          x, TVAR {contents = UNLINK x'} -> x = x'
+        | x, TVAR {contents = LINK t }  -> occurs (x, t)
+        | x, TARR (t1, t2) -> occurs (x, t1) || occurs (x, t2) in
       let rec unify = function
           TVAR {contents = LINK t}, t' | t', TVAR {contents = LINK t} -> unify (t, t')
         | TVAR ({contents = UNLINK x}), TVAR ({contents = UNLINK x'}) when x = x' ->
-            ()
+            true
         | TVAR ({contents = UNLINK x} as r), t | t, TVAR ({contents = UNLINK x} as r) ->
-            r := LINK t
-        | TARR (t1, t2), TARR (t1', t2') -> (unify (t1, t1'); unify (t2, t2')) in
-      List.iter unify (!equations) in
+            if occurs (x, t) then false else (r := LINK t; true)
+        | TARR (t1, t2), TARR (t1', t2') -> unify (t1, t1') && unify (t2, t2') in
+      List.for_all unify (!equations) in
 
     let rec gen_cons = function
         cxt, VAR x -> (fun () -> STLC.VAR x), List.assoc x cxt
@@ -226,8 +230,10 @@ struct
     let expr', t = gen_cons ([], expr) in
     begin
       print_equations ();
-      solve_equations ();
-      (expr' (), concretize_type t)
+      let success = solve_equations () in
+      if success
+        then Some (expr' (), concretize_type t)
+        else None
     end
 
   type typescheme = MONO of typ
@@ -249,14 +255,19 @@ struct
               LAM ("y",
                     AP (AP (VAR "f", AP (VAR "g", VAR "y")), AP (VAR "g", VAR "y")))))
 
+  (* \x. x x, not typeable *)
+  let e3 = LAM ("x", AP (VAR "x", VAR "x"))
+
   let test () = begin
     let test_mono e = begin
       print_endline ("Inferring " ^ expr_to_string e);
-      let e', t = typeinfer e in
-      print_endline ("  (" ^ STLC.expr_to_string e' ^ ") : " ^ STLC.typ_to_string t)
+      match typeinfer e with
+          Some (e', t) -> print_endline ("  (" ^ STLC.expr_to_string e' ^ ") : " ^ STLC.typ_to_string t)
+        | None -> print_endline "  not typeable"
     end in
     test_mono e0;
     test_mono e1;
-    test_mono e2
+    test_mono e2;
+    test_mono e3
   end
 end
