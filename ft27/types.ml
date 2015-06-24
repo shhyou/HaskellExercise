@@ -93,6 +93,7 @@ module LC : sig
 
   val expr_to_string : expr -> string
   val typeinfer : expr -> STLC.typ
+  val test : unit -> unit
 end =
 struct
   type expr = VAR of string
@@ -109,13 +110,17 @@ struct
     fun e -> showe (0, e)
 
   (* meta type *)
+  (* code reference: http://okmij.org/ftp/ML/generalization.html *)
   type typ = TVAR of metavar ref
            | TARR of typ * typ
   and metavar = UNLINK of string | LINK of typ
 
-  let concretize_type (t : typ) : STLC.typ = raise Undefined
+  let rec concretize_type = function
+      TVAR {contents = UNLINK x} -> STLC.TVAR x
+    | TVAR {contents = LINK t} -> concretize_type t
+    | TARR (t1, t2) -> STLC.TARR (concretize_type t1, concretize_type t2)
 
-  let typeinfer =
+  let typeinfer expr =
     let fresh_sym =
       let cnt = ref 0 in
       fun () -> begin
@@ -123,7 +128,25 @@ struct
         "t" ^ string_of_int (!cnt)
       end in
 
-    let add_equation (t1, t2) = raise Undefined in
+    let equations = ref [] in
+
+    let add_equation (eq : typ * typ) = equations := eq::(!equations) in
+
+    let print_equations () =
+      List.iter
+        (fun (t1, t2) ->
+          print_endline (STLC.typ_to_string (concretize_type t1) ^ " = "
+                       ^ STLC.typ_to_string (concretize_type t2)))
+        (!equations) in
+
+    let solve_equations () =
+      let rec occurs e = false in
+      let rec unify = function
+          TVAR ({contents = UNLINK x} as r), t | t, TVAR ({contents = UNLINK x} as r) ->
+            r := LINK t
+        | TVAR {contents = LINK t}, t' | t', TVAR {contents = LINK t} -> unify (t, t')
+        | TARR (t1, t2), TARR (t1', t2') -> (unify (t1, t1'); unify (t2, t2')) in
+      List.iter unify (!equations) in
 
     let rec gen_cons = function
         cxt, VAR x -> List.assoc x cxt
@@ -138,11 +161,42 @@ struct
           (add_equation (t1, TARR (t2, t));
            t)
       | cxt, LET (x, e1, e2) -> gen_cons ((x, gen_cons (cxt, e1))::cxt, e2) in
-    fun e -> raise Undefined
+
+    let t = gen_cons ([], expr) in
+    begin
+      print_equations ();
+      solve_equations ();
+      concretize_type t
+    end
 
   type typescheme = MONO of typ
                   | POLY of string list * typ
   let typeinfer_hm e = raise Undefined
+
+  (* \x. x *)
+  let e0 = LAM ("x", VAR "x")
+
+  (* \f. \x. f x x *)
+  let e1 = LAM ("f",
+            LAM ("x",
+              AP (AP (VAR "f", VAR "x"), VAR "x")))
+
+  (* \f. let g = \x. f x x in \y. f (g y) (g y) *)
+  let e2 = LAM ("f",
+            LET ("g", LAM ("x",
+                        AP (AP (VAR "f", VAR "x"), VAR "x")),
+              LAM ("y",
+                    AP (AP (VAR "f", AP (VAR "g", VAR "y")), AP (VAR "g", VAR "y")))))
+
+  let test () = begin
+    let test_mono e = begin
+      print_endline ("Inferring " ^ expr_to_string e);
+      print_endline ("  " ^ STLC.typ_to_string (typeinfer e))
+    end in
+    test_mono e0;
+    test_mono e1;
+    test_mono e2
+  end
 end
 
 module SystemF : sig
