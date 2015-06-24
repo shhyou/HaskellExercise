@@ -85,6 +85,62 @@ struct
     end
 end
 
+module SystemF : sig
+  type expr = VAR  of string
+            | LAM  of string * typ * expr
+            | AP   of expr * expr
+            | LET  of string * expr * expr
+            | TLAM of string * expr
+            | TAP  of expr * typ
+
+  and typ = TVAR of string
+          | TARR of typ * typ
+          | TALL of string * typ
+
+  val expr_to_string : expr -> string
+  val typ_to_string : typ -> string
+  val test : unit -> unit
+end =
+struct
+  type expr = VAR  of string
+            | LAM  of string * typ * expr
+            | AP   of expr * expr
+            | LET  of string * expr * expr
+            | TLAM of string * expr
+            | TAP  of expr * typ
+
+  and typ = TVAR of string
+          | TARR of typ * typ
+          | TALL of string * typ
+
+  let (expr_to_string, typ_to_string) =
+    let rec showe = function
+        d, VAR x -> x
+      | d, LAM (x, t, e) -> paren (d > 0) ("\\(" ^ x ^ ":" ^ showt (0, t) ^ "). " ^ showe (0, e))
+      | d, AP (e1, e2) -> paren (d > 10) (showe (10, e1) ^ " " ^ showe (11, e2))
+      | d, LET (x, e1, e2) -> paren (d > 0) ("let " ^ x ^ " = " ^ showe (0, e1) ^ " in " ^ showe (0, e2))
+      | d, TLAM (a, e) -> paren (d > 0) ("/\\" ^ a ^ ". " ^ showe (0, e))
+      | d, TAP (e, t) -> paren (d > 10) (showe (10, e) ^ " [" ^ showt (0, t) ^ "]")
+    and showt = function
+        d, TVAR a -> a
+      | d, TARR (t1, t2) -> paren (d > 0) (showt (1, t1) ^ " -> " ^ showt (0, t2))
+      | d, TALL (a, t) -> paren (d > 0) ("\\/" ^ a ^ ". " ^ showt (0, t)) in
+    ((fun e -> showe (0, e)), (fun t -> showt (0, t)))
+
+  (* /\A. \(x:A). x *)
+  let e0 = TLAM ("A", LAM ("x", TVAR "A", VAR "x"))
+  let t0 = TALL ("A", TARR (TVAR "A", TVAR "A"))
+
+  let e3 = LET ("id", TLAM ("A", LAM ("x", TVAR "A", VAR "x")),
+                AP (TAP (VAR "id", TALL ("B", TARR (TVAR "B", TVAR "B"))), VAR "id"))
+  let t3 = TALL ("B", TARR (TVAR "B", TVAR "B"))
+
+  let test () = begin
+    print_endline (expr_to_string e0 ^ " : " ^ typ_to_string t0);
+    print_endline (expr_to_string e3 ^ " : " ^ typ_to_string t3)
+  end
+end
+
 module LC : sig
   type expr = VAR of string
             | LAM of string * expr
@@ -203,27 +259,4 @@ struct
     test_mono e1;
     test_mono e2
   end
-end
-
-module SystemF : sig
-  type expr = VAR  of string 
-            | LAM  of string * typ * expr
-            | AP   of expr * expr
-            | TLAM of string * expr
-            | TAP  of expr * typ
-
-  and typ = TVAR of string
-          | TARR of typ * typ
-          | TALL of string * typ
-end =
-struct
-  type expr = VAR  of string 
-            | LAM  of string * typ * expr
-            | AP   of expr * expr
-            | TLAM of string * expr
-            | TAP  of expr * typ
-
-  and typ = TVAR of string
-          | TARR of typ * typ
-          | TALL of string * typ
 end
