@@ -92,7 +92,7 @@ module LC : sig
             | LET of string * expr * expr
 
   val expr_to_string : expr -> string
-  val typeinfer : expr -> STLC.typ
+  val typeinfer : expr -> STLC.expr * STLC.typ
   val test : unit -> unit
 end =
 struct
@@ -151,24 +151,27 @@ struct
       List.iter unify (!equations) in
 
     let rec gen_cons = function
-        cxt, VAR x -> List.assoc x cxt
+        cxt, VAR x -> (fun () -> STLC.VAR x), List.assoc x cxt
       | cxt, LAM (x, e) ->
           let t = TVAR (ref (UNLINK (fresh_sym ()))) in
-          let t' = gen_cons ((x, t)::cxt, e) in
-          TARR (t, t')
+          let e', t' = gen_cons ((x, t)::cxt, e) in
+          (fun () -> STLC.LAM (x, concretize_type t, e' ())), TARR (t, t')
       | cxt, AP (e1, e2) ->
-          let t1 = gen_cons (cxt, e1) in
-          let t2 = gen_cons (cxt, e2) in
+          let e1', t1 = gen_cons (cxt, e1) in
+          let e2', t2 = gen_cons (cxt, e2) in
           let t = TVAR (ref (UNLINK (fresh_sym ()))) in
           (add_equation (t1, TARR (t2, t));
-           t)
-      | cxt, LET (x, e1, e2) -> gen_cons ((x, gen_cons (cxt, e1))::cxt, e2) in
+           (fun () -> STLC.AP (e1' (), e2' ())), t)
+      | cxt, LET (x, e1, e2) ->
+          let e1', t = gen_cons (cxt, e1) in
+          let e2', t' = gen_cons ((x, t)::cxt, e2) in
+          (fun () -> STLC.LET (x, e1' (), e2' ())), t' in
 
-    let t = gen_cons ([], expr) in
+    let expr', t = gen_cons ([], expr) in
     begin
       print_equations ();
       solve_equations ();
-      concretize_type t
+      (expr' (), concretize_type t)
     end
 
   type typescheme = MONO of typ
@@ -193,7 +196,8 @@ struct
   let test () = begin
     let test_mono e = begin
       print_endline ("Inferring " ^ expr_to_string e);
-      print_endline ("  " ^ STLC.typ_to_string (typeinfer e))
+      let e', t = typeinfer e in
+      print_endline ("  (" ^ STLC.expr_to_string e' ^ ") : " ^ STLC.typ_to_string t)
     end in
     test_mono e0;
     test_mono e1;
