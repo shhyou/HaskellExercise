@@ -142,9 +142,11 @@ struct
     let solve_equations () =
       let rec occurs e = false in
       let rec unify = function
-          TVAR ({contents = UNLINK x} as r), t | t, TVAR ({contents = UNLINK x} as r) ->
+          TVAR {contents = LINK t}, t' | t', TVAR {contents = LINK t} -> unify (t, t')
+        | TVAR ({contents = UNLINK x}), TVAR ({contents = UNLINK x'}) when x = x' ->
+            ()
+        | TVAR ({contents = UNLINK x} as r), t | t, TVAR ({contents = UNLINK x} as r) ->
             r := LINK t
-        | TVAR {contents = LINK t}, t' | t', TVAR {contents = LINK t} -> unify (t, t')
         | TARR (t1, t2), TARR (t1', t2') -> (unify (t1, t1'); unify (t2, t2')) in
       List.iter unify (!equations) in
 
