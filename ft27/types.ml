@@ -44,8 +44,8 @@ struct
            Some t2 -> Some (TARR (t1, t2))
          | None -> None)
       | cxt, AP (e1, e2) ->
-         (match (infer (cxt, e1), infer (cxt, e2)) with
-           (Some (TARR (t1, t2)), Some t1') when t1 = t1' -> Some t2
+         (match infer (cxt, e1), infer (cxt, e2) with
+           Some (TARR (t1, t2)), Some t1' when t1 = t1' -> Some t2
          | _ -> None)
       | cxt, LET (x, e1, e2) ->
          (match infer (cxt, e1) with
@@ -136,9 +136,82 @@ struct
                 AP (TAP (VAR "id", TALL ("B", TARR (TVAR "B", TVAR "B"))), VAR "id"))
   let t3 = TALL ("B", TARR (TVAR "B", TVAR "B"))
 
+  let rec check_type = function
+      tcxt, TVAR x -> List.mem x tcxt
+    | tcxt, TARR (t1, t2) -> check_type (tcxt, t1) && check_type (tcxt, t2)
+    | tcxt, TALL (a, t) -> check_type (a::tcxt, t)
+
+  let type_equal =
+    let rec check = function
+        cxt, TVAR x, TVAR y -> List.assoc x cxt = y
+      | cxt, TARR (t1, t2), TARR (t1', t2') -> check (cxt, t1, t1') && check (cxt, t2, t2')
+      | cxt, TALL (a, t), TALL (a', t') -> check ((a, a')::cxt, t, t')
+      | _ -> false in
+    fun (t1, t2) -> check ([], t1, t2)
+
+  (* type_subst (t, a, t') := t [t' / a], substitute t' for a in t *)
+  let type_subst =
+    let fresh_sym =
+      let cnt = ref 0 in
+      fun () -> begin
+        cnt := !cnt + 1;
+        "t" ^ string_of_int (!cnt)
+      end in
+
+    (* alpha conversion; alpha_conv (t, y, x) = t|_{x = y} *)
+    let rec alpha_conv = function
+        TVAR a as t, y, x -> if a = x then TVAR y else t
+      | TARR (t1, t2), y, x -> TARR (alpha_conv (t1, y, x), alpha_conv (t2, y, x))
+      | TALL (a, _) as t, y, x when a = x -> t
+      | TALL (a, t), y, x -> TALL (a, alpha_conv (t, y, x)) in
+
+    let rec subst = function
+        TVAR x as t, a, t' -> if x = a then t' else t
+      | TARR (t1, t2), a, t' -> TARR (subst (t1, a, t'), subst (t2, a, t'))
+      | TALL (x, _) as t, a, t' when x = a -> t
+      | TALL (x, t), a, t' ->
+          let y = fresh_sym () in
+          TALL (y, subst (t, a, alpha_conv (t', y, x))) in
+    subst
+
+  let rec infer = function
+      tcxt, ecxt, VAR x -> Some (List.assoc x ecxt)
+    | tcxt, ecxt, LAM (x, t, e) ->
+        if not (check_type (tcxt, t))
+          then None
+          else (match infer (tcxt, (x,t)::ecxt, e) with
+                  Some t' -> Some (TARR (t, t'))
+                | None -> None)
+    | tcxt, ecxt, AP (e1, e2) ->
+        (match infer (tcxt, ecxt, e1), infer (tcxt, ecxt, e2) with
+          Some (TARR (t1, t2)), Some t1' when type_equal (t1, t1') -> Some t2
+        | _ -> None)
+    | tcxt, ecxt, LET (x, e1, e2) ->
+        (match infer (tcxt, ecxt, e1) with
+          Some t -> infer (tcxt, (x,t)::ecxt, e2)
+        | None -> None)
+    | tcxt, ecxt, TLAM (a, e) ->
+        (match infer (a::tcxt, ecxt, e) with
+          Some t -> Some (TALL (a, t))
+        | None -> None)
+    | tcxt, ecxt, TAP (e, t) ->
+        (match infer (tcxt, ecxt, e) with
+          Some (TALL (a, t')) ->
+            if check_type (tcxt, t)
+              then Some (type_subst (t', a, t))
+              else None
+        | _ -> None)
+
   let test () = begin
-    print_endline (expr_to_string e0 ^ " : " ^ typ_to_string t0);
-    print_endline (expr_to_string e3 ^ " : " ^ typ_to_string t3)
+    let test_infer e t = begin
+      print_endline (expr_to_string e);
+      print_endline ("  " ^ typ_to_string t);
+      match infer ([], [], e) with
+        Some t -> print_endline ("  " ^ typ_to_string t ^ "\n")
+      | None -> print_endline "None\n"
+    end in
+    test_infer e0 t0;
+    test_infer e3 t3
   end
 end
 
