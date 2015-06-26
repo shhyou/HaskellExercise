@@ -163,7 +163,7 @@ struct
       | n, x, y::ys -> if x = y then n else index (n+1, x, ys) in
     let rec check = function
         cxt1, cxt2, TVAR x, TVAR y ->
-          let bound1, bound2 = List.mem x cxt1, List.mem x cxt2 in
+          let bound1, bound2 = List.mem x cxt1, List.mem y cxt2 in
           bound1 == bound2 &&
           (if bound1 then index (0, x, cxt1) = index (0, y, cxt2) else x = y)
       | cxt1, cxt2, TARR (t1, t2), TARR (t1', t2') ->
