@@ -145,14 +145,17 @@ struct
     | tcxt, TARR (t1, t2) -> type_check (tcxt, t1) && type_check (tcxt, t2)
     | tcxt, TALL (a, t) -> type_check (a::tcxt, t)
 
-  (* FIXME: type context *)
   let type_equal =
     let rec check = function
-        cxt, TVAR x, TVAR y -> List.assoc x cxt = y
-      | cxt, TARR (t1, t2), TARR (t1', t2') -> check (cxt, t1, t1') && check (cxt, t2, t2')
-      | cxt, TALL (a, t), TALL (a', t') -> check ((a, a')::cxt, t, t')
+        cxt1, cxt2, map, TVAR x, TVAR y ->
+          let bound1, bound2 = List.mem x cxt1, List.mem x cxt2 in
+          bound1 == bound2 && (not bound1 || List.assoc x map == y)
+      | cxt1, cxt2, map, TARR (t1, t2), TARR (t1', t2') ->
+          check (cxt1, cxt2, map, t1, t1') && check (cxt1, cxt2, map, t2, t2')
+      | cxt1, cxt2, map, TALL (a, t), TALL (a', t') ->
+          check (a::cxt1, a'::cxt2, (a,a')::map, t, t')
       | _ -> false in
-    fun (t1, t2) -> check ([], t1, t2)
+    fun (t1, t2) -> check ([], [], [], t1, t2)
 
   (* type_subst (t, a, t') := t [t' / a], substitute t' for a in t *)
   let type_subst =
