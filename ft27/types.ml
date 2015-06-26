@@ -180,7 +180,7 @@ struct
       let cnt = ref 0 in
       fun () -> begin
         cnt := !cnt + 1;
-        "t" ^ string_of_int (!cnt)
+        "T" ^ string_of_int (!cnt)
       end in
 
     (* alpha conversion; alpha_conv (t, y, x) = t|_{x = y} *)
@@ -249,6 +249,13 @@ module LC : sig
   val test : unit -> unit
 end =
 struct
+  let fresh_sym =
+    let cnt = ref 0 in
+    fun prefix -> begin
+      cnt := !cnt + 1;
+      prefix ^ string_of_int (!cnt)
+    end
+
   type expr = VAR of string
             | LAM of string * expr
             | AP  of expr * expr
@@ -291,14 +298,9 @@ struct
   exception STLC_no_unify of expr * STLC.typ * STLC.typ
   exception STLC_infinite_type of expr * STLC.typ * STLC.typ
 
-  let typeinfer expr =
-    let fresh_sym =
-      let cnt = ref 0 in
-      fun () -> begin
-        cnt := !cnt + 1;
-        "t" ^ string_of_int (!cnt)
-      end in
+  let fresh_var () = TVAR (ref (UNLINK (fresh_sym "T")))
 
+  let typeinfer expr =
     let equations : (expr * typ * typ) list ref = ref [] in
 
     let add_equation eq = equations := eq::(!equations) in
@@ -335,13 +337,13 @@ struct
     let rec gen_cons = function
         cxt, VAR x -> (fun () -> STLC.VAR x), List.assoc x cxt
       | cxt, LAM (x, e) ->
-          let t = TVAR (ref (UNLINK (fresh_sym ()))) in
+          let t = fresh_var () in
           let e', t' = gen_cons ((x, t)::cxt, e) in
           (fun () -> STLC.LAM (x, to_STLC_typ t, e' ())), TARR (t, t')
       | cxt, (AP (e1, e2) as e) ->
           let e1', t1 = gen_cons (cxt, e1) in
           let e2', t2 = gen_cons (cxt, e2) in
-          let t = TVAR (ref (UNLINK (fresh_sym ()))) in begin
+          let t = fresh_var () in begin
             add_equation (e, t1, TARR (t2, t));
             (fun () -> STLC.AP (e1' (), e2' ())), t
           end
@@ -401,17 +403,17 @@ struct
     let rec infer = function
         cxt, VAR x ->
           let POLY (qvars, t) = List.assoc x cxt in
-          let vars = List.map (fun qvar -> qvar, TVAR (ref (UNLINK (fresh_sym ())))) qvars in
+          let vars = List.map (fun qvar -> qvar, fresh_var ()) qvars in
           let make_tap e (_, var) = SysF.TAP (e, to_SysF_typ var) in
           (fun () -> List.fold_left make_tap (SysF.VAR x) vars), instantiate vars t
       | cxt, LAM (x, e) ->
-          let t = TVAR (ref (UNLINK (fresh_sym ()))) in
+          let t = fresh_var () in
           let e', t' = infer ((x, POLY ([], t))::cxt, e) in
           (fun () -> SysF.LAM (x, to_SysF_typ t, e' ())), TARR (t, t')
       | cxt, (AP (e1, e2) as e) ->
           let e1', t1 = infer (cxt, e1) in
           let e2', t2 = infer (cxt, e2) in
-          let t = TVAR (ref (UNLINK (fresh_sym ()))) in begin
+          let t = fresh_var () in begin
             (try unify (t1, TARR (t2, t)) with
               UnifyError SHAPE_MISMATCH -> raise (SysF_no_unify (e, to_SysF_typ t1, to_SysF_typ t2))
             | UnifyError OCCURS_CHECK -> raise (SysF_infinite_type (e, to_SysF_typ t1, to_SysF_typ t2)));
