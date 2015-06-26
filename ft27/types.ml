@@ -195,7 +195,7 @@ struct
       | TALL (x, _) as t, a, t' when x = a -> t
       | TALL (x, t), a, t' ->
           let y = fresh_sym () in
-          TALL (y, subst (t, a, alpha_conv (t', y, x))) in
+          TALL (y, subst (alpha_conv (t, y, x), a, t')) in
     subst
 
   let get_type =
