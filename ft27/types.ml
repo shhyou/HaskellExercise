@@ -2,6 +2,16 @@ exception Undefined;;
 
 let paren b s = if b then "(" ^ s ^ ")" else s
 
+(* remove duplicated terms, O(n^2) *)
+let nub =
+  let rec remove = function
+      cxt, [] -> []
+    | cxt, x::xs -> if List.mem x cxt then remove (cxt, xs) else x::remove (x::cxt, xs) in
+  fun xs -> remove ([], xs)
+
+(* xs \\ ys *)
+let diff xs ys = List.filter (fun x -> not (List.mem x ys)) xs
+
 module STLC : sig
   type expr = VAR of string
             | LAM of string * typ * expr
@@ -85,7 +95,7 @@ struct
     end
 end
 
-module SystemF : sig
+module SysF : sig
   type expr = VAR  of string
             | LAM  of string * typ * expr
             | AP   of expr * expr
@@ -237,6 +247,7 @@ module LC : sig
 
   val expr_to_string : expr -> string
   val typeinfer : expr -> (STLC.expr * STLC.typ) option
+  val typeinfer_hm : expr -> (SysF.expr * SysF.typ) option
   val test : unit -> unit
 end =
 struct
@@ -259,10 +270,22 @@ struct
            | TARR of typ * typ
   and metavar = UNLINK of string | LINK of typ
 
-  let rec concretize_type = function
+  let rec to_STLC_typ = function
       TVAR {contents = UNLINK x} -> STLC.TVAR x
-    | TVAR {contents = LINK t} -> concretize_type t
-    | TARR (t1, t2) -> STLC.TARR (concretize_type t1, concretize_type t2)
+    | TVAR {contents = LINK t} -> to_STLC_typ t
+    | TARR (t1, t2) -> STLC.TARR (to_STLC_typ t1, to_STLC_typ t2)
+
+  let rec to_SysF_typ = function
+      TVAR {contents = UNLINK x} -> SysF.TVAR x
+    | TVAR {contents = LINK t} -> to_SysF_typ t
+    | TARR (t1, t2) -> SysF.TARR (to_SysF_typ t1, to_SysF_typ t2)
+
+  let type_fvs =
+    let rec fvs = function
+        cxt, TVAR {contents = UNLINK x} -> if not (List.mem x cxt) then [x] else []
+      | cxt, TVAR {contents = LINK t} -> fvs (cxt, t)
+      | cxt, TARR (t1, t2) -> fvs (cxt, t1) @ fvs (cxt, t2) in
+    fun t -> nub (fvs ([], t))
 
   let typeinfer expr =
     let fresh_sym =
@@ -279,8 +302,8 @@ struct
     let print_equations () =
       List.iter
         (fun (t1, t2) ->
-          print_endline (STLC.typ_to_string (concretize_type t1) ^ " = "
-                       ^ STLC.typ_to_string (concretize_type t2)))
+          print_endline (STLC.typ_to_string (to_STLC_typ t1) ^ " = "
+                       ^ STLC.typ_to_string (to_STLC_typ t2)))
         (!equations) in
 
     let solve_equations () =
@@ -302,7 +325,7 @@ struct
       | cxt, LAM (x, e) ->
           let t = TVAR (ref (UNLINK (fresh_sym ()))) in
           let e', t' = gen_cons ((x, t)::cxt, e) in
-          (fun () -> STLC.LAM (x, concretize_type t, e' ())), TARR (t, t')
+          (fun () -> STLC.LAM (x, to_STLC_typ t, e' ())), TARR (t, t')
       | cxt, AP (e1, e2) ->
           let e1', t1 = gen_cons (cxt, e1) in
           let e2', t2 = gen_cons (cxt, e2) in
@@ -319,13 +342,72 @@ struct
       print_equations ();
       let success = solve_equations () in
       if success
-        then Some (expr' (), concretize_type t)
+        then Some (expr' (), to_STLC_typ t)
         else None
     end
 
-  type typescheme = MONO of typ
-                  | POLY of string list * typ
-  let typeinfer_hm e = raise Undefined
+  type typescheme = POLY of string list * typ
+
+  let typeinfer_hm expr =
+    let fresh_sym =
+      let cnt = ref 0 in
+      fun () -> begin
+        cnt := !cnt + 1;
+        "t" ^ string_of_int (!cnt)
+      end in
+
+    let instantiate cxt =
+      let rec inst = function
+          TVAR {contents = LINK t} -> inst t
+        | TVAR {contents = UNLINK x} as t -> (try List.assoc x cxt with Not_found -> t)
+        | TARR (t1, t2) -> TARR (inst t1, inst t2) in
+      inst in
+
+    let rec occurs = function
+        x, TVAR {contents = UNLINK x'} -> x = x'
+      | x, TVAR {contents = LINK t}  -> occurs (x, t)
+      | x, TARR (t1, t2) -> occurs (x, t1) || occurs (x, t2) in
+
+    let rec unify = function
+        TVAR {contents = LINK t}, t' | t', TVAR {contents = LINK t} -> unify (t, t')
+      | TVAR ({contents = UNLINK x}), TVAR ({contents = UNLINK x'}) when x = x' ->
+          true
+      | TVAR ({contents = UNLINK x} as r), t | t, TVAR ({contents = UNLINK x} as r) ->
+          if occurs (x, t) then false else (r := LINK t; true)
+      | TARR (t1, t2), TARR (t1', t2') -> unify (t1, t1') && unify (t2, t2') in
+
+    let quantify (cxt, e1', t) =
+      let fvs = List.concat (List.map (fun (_, POLY (qvars, t)) -> diff (type_fvs t) qvars) cxt) in
+      let qvars = diff (type_fvs t) fvs in
+      let make_tlam e qvar = SysF.TLAM (qvar, e) in
+      (fun () -> List.fold_left make_tlam (e1' ()) qvars), POLY (qvars, t) in
+
+    let rec infer = function
+        cxt, VAR x ->
+          let POLY (qvars, t) = List.assoc x cxt in
+          let vars = List.map (fun qvar -> qvar, TVAR (ref (UNLINK (fresh_sym ())))) qvars in
+          let make_tap e (_, var) = SysF.TAP (e, to_SysF_typ var) in
+          (fun () -> List.fold_left make_tap (SysF.VAR x) vars), instantiate vars t
+      | cxt, LAM (x, e) ->
+          let t = TVAR (ref (UNLINK (fresh_sym ()))) in
+          let e', t' = infer ((x, POLY ([], t))::cxt, e) in
+          (fun () -> SysF.LAM (x, to_SysF_typ t, e' ())), TARR (t, t')
+      | cxt, AP (e1, e2) ->
+          let e1', t1 = infer (cxt, e1) in
+          let e2', t2 = infer (cxt, e2) in
+          let t = TVAR (ref (UNLINK (fresh_sym ()))) in
+          (* FIXME: error handling *)
+          let _ = unify (t1, TARR (t2, t)) in
+          (fun () -> SysF.AP (e1' (), e2' ())), t
+      | cxt, LET (x, e1, e2) ->
+          let e1', t = infer (cxt, e1) in
+          let e1'', t'' = quantify (cxt, e1', t) in
+          let e2', t' = infer ((x, t'')::cxt, e2) in
+          (fun () -> SysF.LET (x, e1'' (), e2' ())), t' in
+
+    let expr, t = infer ([], expr) in
+    let expr', POLY (qvars', t') = quantify ([], expr, t) in
+    Some (expr' (), List.fold_left (fun e qvar -> SysF.TALL (qvar, e)) (to_SysF_typ t') qvars')
 
   (* \x. x *)
   let e0 = LAM ("x", VAR "x")
@@ -345,6 +427,10 @@ struct
   (* \x. x x, not typeable *)
   let e3 = LAM ("x", AP (VAR "x", VAR "x"))
 
+  let e4 = LET ("id", LAM ("x", VAR "x"), AP (VAR "id", VAR "id"))
+
+  let e5 = LAM ("x", LAM ("f", AP (VAR "f", VAR "x")))
+
   let test () = begin
     let test_mono e = begin
       print_endline ("Inferring " ^ expr_to_string e);
@@ -352,9 +438,25 @@ struct
           Some (e', t) -> print_endline ("  (" ^ STLC.expr_to_string e' ^ ") : " ^ STLC.typ_to_string t)
         | None -> print_endline "  not typeable"
     end in
+    print_endline "==== Testing simply-typed lambda calculus ====";
     test_mono e0;
     test_mono e1;
     test_mono e2;
-    test_mono e3
+    test_mono e3;
+    test_mono e4;
+    test_mono e5;
+    let test_poly e = begin
+      print_endline ("Inferring " ^ expr_to_string e);
+      match typeinfer_hm e with
+          Some (e', t) -> print_endline ("  (" ^ SysF.expr_to_string e' ^ ") : " ^ SysF.typ_to_string t)
+        | None -> print_endline "  not typeable"
+    end in
+    print_endline "==== Testing polymorphic lambda calculus ====";
+    test_poly e0;
+    test_poly e1;
+    test_poly e2;
+    test_poly e3;
+    test_poly e4;
+    test_poly e5
   end
 end
