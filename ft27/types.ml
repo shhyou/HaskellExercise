@@ -146,16 +146,20 @@ struct
     | tcxt, TALL (a, t) -> type_check (a::tcxt, t)
 
   let type_equal =
+    let rec index = function
+        _, _, [] -> raise Not_found
+      | n, x, y::ys -> if x = y then n else index (n+1, x, ys) in
     let rec check = function
-        cxt1, cxt2, map, TVAR x, TVAR y ->
+        cxt1, cxt2, TVAR x, TVAR y ->
           let bound1, bound2 = List.mem x cxt1, List.mem x cxt2 in
-          bound1 == bound2 && (not bound1 || List.assoc x map == y)
-      | cxt1, cxt2, map, TARR (t1, t2), TARR (t1', t2') ->
-          check (cxt1, cxt2, map, t1, t1') && check (cxt1, cxt2, map, t2, t2')
-      | cxt1, cxt2, map, TALL (a, t), TALL (a', t') ->
-          check (a::cxt1, a'::cxt2, (a,a')::map, t, t')
+          bound1 == bound2 &&
+          (if bound1 then index (0, x, cxt1) = index (0, y, cxt2) else x = y)
+      | cxt1, cxt2, TARR (t1, t2), TARR (t1', t2') ->
+          check (cxt1, cxt2, t1, t1') && check (cxt1, cxt2, t2, t2')
+      | cxt1, cxt2, TALL (a1, t1), TALL (a2, t2) ->
+          check (a1::cxt1, a2::cxt2, t1, t2)
       | _ -> false in
-    fun (t1, t2) -> check ([], [], [], t1, t2)
+    fun (t1, t2) -> check ([], [], t1, t2)
 
   (* type_subst (t, a, t') := t [t' / a], substitute t' for a in t *)
   let type_subst =
