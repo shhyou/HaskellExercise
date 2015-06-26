@@ -462,12 +462,7 @@ struct
       | STLC_no_unify _ -> print_endline "  not typeable"
     end in
     print_endline "==== Testing simply-typed lambda calculus ====";
-    test_mono e0;
-    test_mono e1;
-    test_mono e2;
-    test_mono e3;
-    test_mono e4;
-    test_mono e5;
+    List.iter test_mono [e0; e1; e2; e3; e4; e5];
     let test_poly e = begin
       print_endline ("Inferring " ^ expr_to_string e);
       try
@@ -478,11 +473,6 @@ struct
       | SysF_no_unify _ -> print_endline "  not typeable"
     end in
     print_endline "==== Testing polymorphic lambda calculus ====";
-    test_poly e0;
-    test_poly e1;
-    test_poly e2;
-    test_poly e3;
-    test_poly e4;
-    test_poly e5
+    List.iter test_poly [e0; e1; e2; e3; e4; e5];
   end
 end
