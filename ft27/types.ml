@@ -13,7 +13,7 @@ module STLC : sig
 
   val expr_to_string : expr -> string
   val typ_to_string : typ -> string
-  val typecheck : expr * typ -> bool
+  val get_type : expr -> typ option
   val test : unit -> unit
 end =
 struct
@@ -34,9 +34,9 @@ struct
     and showt = function
         d, TVAR a -> a
       | d, TARR (t1, t2) -> paren (d > 0) (showt (1, t1) ^ " -> " ^ showt (0, t2)) in
-    ((fun e -> showe (0, e)), (fun t -> showt (0, t)))
+    (fun e -> showe (0, e)), (fun t -> showt (0, t))
 
-  let typecheck =
+  let get_type =
     let rec infer = function
         cxt, VAR x -> Some (List.assoc x cxt)
       | cxt, LAM (x, t1, e) ->
@@ -51,7 +51,7 @@ struct
          (match infer (cxt, e1) with
            Some t -> infer ((x,t)::cxt, e2)
          | _ -> None) in
-      fun (e, t) -> match infer ([], e) with Some t' -> t = t' | None -> false
+      fun e -> infer ([], e)
 
   (* \(x:A). x *)
   let e0 = LAM ("x", TVAR "A", VAR "x")
@@ -75,8 +75,8 @@ struct
 
   let test () =
     let test_check (e, t) = begin
-      print_string ("Check " ^ expr_to_string e ^ " with " ^ typ_to_string t);
-      print_endline (" : " ^ (match typecheck (e, t) with true -> "true" | false -> "false"))
+      print_endline ("Check " ^ expr_to_string e ^ "\n  " ^ typ_to_string t);
+      print_endline ("  " ^ (match get_type e with Some t' -> typ_to_string t' | None -> "None") ^ "\n")
     end in
     begin
       test_check (e0, t0);
@@ -99,6 +99,10 @@ module SystemF : sig
 
   val expr_to_string : expr -> string
   val typ_to_string : typ -> string
+  val type_check : string list * typ -> bool
+  val type_equal : typ * typ -> bool
+  val type_subst : typ * string * typ -> typ
+  val get_type : expr -> typ option
   val test : unit -> unit
 end =
 struct
@@ -136,11 +140,12 @@ struct
                 AP (TAP (VAR "id", TALL ("B", TARR (TVAR "B", TVAR "B"))), VAR "id"))
   let t3 = TALL ("B", TARR (TVAR "B", TVAR "B"))
 
-  let rec check_type = function
+  let rec type_check = function
       tcxt, TVAR x -> List.mem x tcxt
-    | tcxt, TARR (t1, t2) -> check_type (tcxt, t1) && check_type (tcxt, t2)
-    | tcxt, TALL (a, t) -> check_type (a::tcxt, t)
+    | tcxt, TARR (t1, t2) -> type_check (tcxt, t1) && type_check (tcxt, t2)
+    | tcxt, TALL (a, t) -> type_check (a::tcxt, t)
 
+  (* FIXME: type context *)
   let type_equal =
     let rec check = function
         cxt, TVAR x, TVAR y -> List.assoc x cxt = y
@@ -174,39 +179,41 @@ struct
           TALL (y, subst (t, a, alpha_conv (t', y, x))) in
     subst
 
-  let rec infer = function
-      tcxt, ecxt, VAR x -> Some (List.assoc x ecxt)
-    | tcxt, ecxt, LAM (x, t, e) ->
-        if not (check_type (tcxt, t))
-          then None
-          else (match infer (tcxt, (x,t)::ecxt, e) with
-                  Some t' -> Some (TARR (t, t'))
-                | None -> None)
-    | tcxt, ecxt, AP (e1, e2) ->
-        (match infer (tcxt, ecxt, e1), infer (tcxt, ecxt, e2) with
-          Some (TARR (t1, t2)), Some t1' when type_equal (t1, t1') -> Some t2
-        | _ -> None)
-    | tcxt, ecxt, LET (x, e1, e2) ->
-        (match infer (tcxt, ecxt, e1) with
-          Some t -> infer (tcxt, (x,t)::ecxt, e2)
-        | None -> None)
-    | tcxt, ecxt, TLAM (a, e) ->
-        (match infer (a::tcxt, ecxt, e) with
-          Some t -> Some (TALL (a, t))
-        | None -> None)
-    | tcxt, ecxt, TAP (e, t) ->
-        (match infer (tcxt, ecxt, e) with
-          Some (TALL (a, t')) ->
-            if check_type (tcxt, t)
-              then Some (type_subst (t', a, t))
-              else None
-        | _ -> None)
+  let get_type =
+    let rec infer = function
+        tcxt, ecxt, VAR x -> Some (List.assoc x ecxt)
+      | tcxt, ecxt, LAM (x, t, e) ->
+          if not (type_check (tcxt, t))
+            then None
+            else (match infer (tcxt, (x,t)::ecxt, e) with
+                    Some t' -> Some (TARR (t, t'))
+                  | None -> None)
+      | tcxt, ecxt, AP (e1, e2) ->
+          (match infer (tcxt, ecxt, e1), infer (tcxt, ecxt, e2) with
+            Some (TARR (t1, t2)), Some t1' when type_equal (t1, t1') -> Some t2
+          | _ -> None)
+      | tcxt, ecxt, LET (x, e1, e2) ->
+          (match infer (tcxt, ecxt, e1) with
+            Some t -> infer (tcxt, (x,t)::ecxt, e2)
+          | None -> None)
+      | tcxt, ecxt, TLAM (a, e) ->
+          (match infer (a::tcxt, ecxt, e) with
+            Some t -> Some (TALL (a, t))
+          | None -> None)
+      | tcxt, ecxt, TAP (e, t) ->
+          (match infer (tcxt, ecxt, e) with
+            Some (TALL (a, t')) ->
+              if type_check (tcxt, t)
+                then Some (type_subst (t', a, t))
+                else None
+          | _ -> None) in
+    fun e -> infer ([], [], e)
 
   let test () = begin
     let test_infer e t = begin
       print_endline (expr_to_string e);
       print_endline ("  " ^ typ_to_string t);
-      match infer ([], [], e) with
+      match get_type e with
         Some t -> print_endline ("  " ^ typ_to_string t ^ "\n")
       | None -> print_endline "None\n"
     end in
