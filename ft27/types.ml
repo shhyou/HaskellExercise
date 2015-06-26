@@ -21,9 +21,10 @@ module STLC : sig
   and typ = TVAR of string
           | TARR of typ * typ
 
+  exception Type_mismatch of (string * typ) list * expr * typ * typ
   val expr_to_string : expr -> string
   val typ_to_string : typ -> string
-  val get_type : expr -> typ option
+  val get_type : expr -> typ
   val test : unit -> unit
 end =
 struct
@@ -34,6 +35,8 @@ struct
 
   and typ = TVAR of string
           | TARR of typ * typ
+
+  exception Type_mismatch of (string * typ) list * expr * typ * typ
 
   let (expr_to_string, typ_to_string) =
     let rec showe = function
@@ -48,19 +51,13 @@ struct
 
   let get_type =
     let rec infer = function
-        cxt, VAR x -> Some (List.assoc x cxt)
-      | cxt, LAM (x, t1, e) ->
-         (match infer ((x,t1)::cxt, e) with
-           Some t2 -> Some (TARR (t1, t2))
-         | None -> None)
-      | cxt, AP (e1, e2) ->
+        cxt, VAR x -> List.assoc x cxt
+      | cxt, LAM (x, t1, e) -> TARR (t1, infer ((x,t1)::cxt, e))
+      | cxt, (AP (e1, e2) as e) ->
          (match infer (cxt, e1), infer (cxt, e2) with
-           Some (TARR (t1, t2)), Some t1' when t1 = t1' -> Some t2
-         | _ -> None)
-      | cxt, LET (x, e1, e2) ->
-         (match infer (cxt, e1) with
-           Some t -> infer ((x,t)::cxt, e2)
-         | _ -> None) in
+           TARR (t1, t2), t1' when t1 = t1' -> t2
+         | t, t1' -> raise (Type_mismatch (cxt, e, t, TARR (t1', TVAR "_?"))))
+      | cxt, LET (x, e1, e2) -> infer ((x,infer (cxt, e1))::cxt, e2) in
       fun e -> infer ([], e)
 
   (* \(x:A). x *)
@@ -86,7 +83,7 @@ struct
   let test () =
     let test_check (e, t) = begin
       print_endline ("Check " ^ expr_to_string e ^ "\n  " ^ typ_to_string t);
-      print_endline ("  " ^ (match get_type e with Some t' -> typ_to_string t' | None -> "None") ^ "\n")
+      print_endline ("  " ^ typ_to_string (get_type e) ^ "\n")
     end in
     begin
       test_check (e0, t0);
@@ -107,12 +104,14 @@ module SysF : sig
           | TARR of typ * typ
           | TALL of string * typ
 
+  exception Type_mismatch of (string * typ) list * expr * typ * typ
+  exception Malformed_type of string list * typ
   val expr_to_string : expr -> string
   val typ_to_string : typ -> string
   val type_check : string list * typ -> bool
   val type_equal : typ * typ -> bool
   val type_subst : typ * string * typ -> typ
-  val get_type : expr -> typ option
+  val get_type : expr -> typ
   val test : unit -> unit
 end =
 struct
@@ -126,6 +125,9 @@ struct
   and typ = TVAR of string
           | TARR of typ * typ
           | TALL of string * typ
+
+  exception Type_mismatch of (string * typ) list * expr * typ * typ
+  exception Malformed_type of string list * typ
 
   let (expr_to_string, typ_to_string) =
     let rec showe = function
@@ -198,41 +200,29 @@ struct
 
   let get_type =
     let rec infer = function
-        tcxt, ecxt, VAR x -> Some (List.assoc x ecxt)
+        tcxt, ecxt, VAR x -> List.assoc x ecxt
       | tcxt, ecxt, LAM (x, t, e) ->
-          if not (type_check (tcxt, t))
-            then None
-            else (match infer (tcxt, (x,t)::ecxt, e) with
-                    Some t' -> Some (TARR (t, t'))
-                  | None -> None)
-      | tcxt, ecxt, AP (e1, e2) ->
+          if type_check (tcxt, t)
+            then TARR (t, infer (tcxt, (x,t)::ecxt, e))
+            else raise (Malformed_type (tcxt, t))
+      | tcxt, ecxt, (AP (e1, e2) as e) ->
           (match infer (tcxt, ecxt, e1), infer (tcxt, ecxt, e2) with
-            Some (TARR (t1, t2)), Some t1' when type_equal (t1, t1') -> Some t2
-          | _ -> None)
-      | tcxt, ecxt, LET (x, e1, e2) ->
-          (match infer (tcxt, ecxt, e1) with
-            Some t -> infer (tcxt, (x,t)::ecxt, e2)
-          | None -> None)
-      | tcxt, ecxt, TLAM (a, e) ->
-          (match infer (a::tcxt, ecxt, e) with
-            Some t -> Some (TALL (a, t))
-          | None -> None)
-      | tcxt, ecxt, TAP (e, t) ->
-          (match infer (tcxt, ecxt, e) with
-            Some (TALL (a, t')) ->
-              if type_check (tcxt, t)
-                then Some (type_subst (t', a, t))
-                else None
-          | _ -> None) in
+            TARR (t1, t2), t1' when type_equal (t1, t1') -> t2
+          | t, t1' -> raise (Type_mismatch (ecxt, e, t, TARR (t1', TVAR "_?"))))
+      | tcxt, ecxt, LET (x, e1, e2) -> infer (tcxt, (x,infer (tcxt, ecxt, e1))::ecxt, e2)
+      | tcxt, ecxt, TLAM (a, e) -> TALL (a, infer (a::tcxt, ecxt, e))
+      | tcxt, ecxt, (TAP (e, t) as e') ->
+          (match type_check (tcxt, t), infer (tcxt, ecxt, e) with
+            false, _ -> raise (Malformed_type (tcxt, t))
+          | true, TALL (a, t') -> type_subst (t', a, t)
+          | _, t -> raise (Type_mismatch (ecxt, e', t, TALL ("_?", TVAR "_?")))) in
     fun e -> infer ([], [], e)
 
   let test () = begin
     let test_infer e t = begin
       print_endline (expr_to_string e);
       print_endline ("  " ^ typ_to_string t);
-      match get_type e with
-        Some t -> print_endline ("  " ^ typ_to_string t ^ "\n")
-      | None -> print_endline "None\n"
+      print_endline ("  " ^ typ_to_string (get_type e) ^ "\n")
     end in
     test_infer e0 t0;
     test_infer e3 t3
