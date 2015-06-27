@@ -238,13 +238,17 @@ module LC : sig
 
   val expr_to_string : expr -> string
 
-  exception STLC_no_unify of expr * STLC.typ * STLC.typ
-  exception STLC_infinite_type of expr * STLC.typ * STLC.typ
-  val typeinfer : expr -> STLC.expr * STLC.typ
+  module Mono : sig
+    exception No_unify of expr * STLC.typ * STLC.typ
+    exception Infinite_type of expr * STLC.typ * STLC.typ
+    val typeinfer : expr -> STLC.expr * STLC.typ
+  end
 
-  exception SysF_no_unify of expr * SysF.typ * SysF.typ
-  exception SysF_infinite_type of expr * SysF.typ * SysF.typ
-  val typeinfer_hm : expr -> SysF.expr * SysF.typ
+  module HM : sig
+    exception No_unify of expr * SysF.typ * SysF.typ
+    exception Infinite_type of expr * SysF.typ * SysF.typ
+    val typeinfer : expr -> SysF.expr * SysF.typ
+  end
 
   val test : unit -> unit
 end =
@@ -275,16 +279,6 @@ struct
            | TARR of typ * typ
   and metavar = UNLINK of string | LINK of typ
 
-  let rec to_STLC_typ = function
-      TVAR {contents = UNLINK x} -> STLC.TVAR x
-    | TVAR {contents = LINK t} -> to_STLC_typ t
-    | TARR (t1, t2) -> STLC.TARR (to_STLC_typ t1, to_STLC_typ t2)
-
-  let rec to_SysF_typ = function
-      TVAR {contents = UNLINK x} -> SysF.TVAR x
-    | TVAR {contents = LINK t} -> to_SysF_typ t
-    | TARR (t1, t2) -> SysF.TARR (to_SysF_typ t1, to_SysF_typ t2)
-
   let type_fvs =
     let rec fvs = function
         cxt, TVAR {contents = UNLINK x} -> if not (List.mem x cxt) then [x] else []
@@ -294,11 +288,6 @@ struct
 
   type unify_error = SHAPE_MISMATCH | OCCURS_CHECK
   exception UnifyError of unify_error
-
-  exception STLC_no_unify of expr * STLC.typ * STLC.typ
-  let stlc_no_unify (e, t1, t2) = STLC_no_unify (e, t1, t2)
-  exception STLC_infinite_type of expr * STLC.typ * STLC.typ
-  let stlc_infinite_type (e, t1, t2) = STLC_infinite_type (e, t1, t2)
 
   let fresh_var () = TVAR (ref (UNLINK (fresh_sym "T")))
 
@@ -322,77 +311,98 @@ struct
       UnifyError exn_typ ->
         raise (List.assoc exn_typ exn_map (expr, to_type t1, to_type t2))
 
-  let typeinfer expr =
-    let rec infer = function
-        cxt, VAR x -> (fun () -> STLC.VAR x), List.assoc x cxt
-      | cxt, LAM (x, e) ->
-          let t = fresh_var () in
-          let e', t' = infer ((x, t)::cxt, e) in
-          (fun () -> STLC.LAM (x, to_STLC_typ t, e' ())), TARR (t, t')
-      | cxt, (AP (e1, e2) as e) ->
-          let e1', t1 = infer (cxt, e1) in
-          let e2', t2 = infer (cxt, e2) in
-          let t = fresh_var () in begin
-            handled_unify (e, t1, TARR (t2, t), to_STLC_typ,
-                           [SHAPE_MISMATCH, stlc_no_unify; OCCURS_CHECK, stlc_infinite_type]);
-            (fun () -> STLC.AP (e1' (), e2' ())), t
-          end
-      | cxt, LET (x, e1, e2) ->
-          let e1', t = infer (cxt, e1) in
-          let e2', t' = infer ((x, t)::cxt, e2) in
-          (fun () -> STLC.LET (x, e1' (), e2' ())), t' in
+  module Mono = struct
+    let rec to_type = function
+        TVAR {contents = UNLINK x} -> STLC.TVAR x
+      | TVAR {contents = LINK t} -> to_type t
+      | TARR (t1, t2) -> STLC.TARR (to_type t1, to_type t2)
 
-    let expr', t = infer ([], expr) in
-    expr' (), to_STLC_typ t
+    exception No_unify of expr * STLC.typ * STLC.typ
+    let no_unify (e, t1, t2) = No_unify (e, t1, t2)
 
-  exception SysF_no_unify of expr * SysF.typ * SysF.typ
-  let sysf_no_unify (e, t1, t2) = SysF_no_unify (e, t1, t2)
-  exception SysF_infinite_type of expr * SysF.typ * SysF.typ
-  let sysf_infinite_type (e, t1, t2) = SysF_infinite_type (e, t1, t2)
+    exception Infinite_type of expr * STLC.typ * STLC.typ
+    let infinite_type (e, t1, t2) = Infinite_type (e, t1, t2)
 
-  type typescheme = POLY of string list * typ
+    let typeinfer expr =
+      let rec infer = function
+          cxt, VAR x -> (fun () -> STLC.VAR x), List.assoc x cxt
+        | cxt, LAM (x, e) ->
+            let t = fresh_var () in
+            let e', t' = infer ((x, t)::cxt, e) in
+            (fun () -> STLC.LAM (x, to_type t, e' ())), TARR (t, t')
+        | cxt, (AP (e1, e2) as e) ->
+            let e1', t1 = infer (cxt, e1) in
+            let e2', t2 = infer (cxt, e2) in
+            let t = fresh_var () in begin
+              handled_unify (e, t1, TARR (t2, t), to_type,
+                             [SHAPE_MISMATCH, no_unify; OCCURS_CHECK, infinite_type]);
+              (fun () -> STLC.AP (e1' (), e2' ())), t
+            end
+        | cxt, LET (x, e1, e2) ->
+            let e1', t = infer (cxt, e1) in
+            let e2', t' = infer ((x, t)::cxt, e2) in
+            (fun () -> STLC.LET (x, e1' (), e2' ())), t' in
 
-  let typeinfer_hm expr =
-    let instantiate cxt =
-      let rec inst = function
-          TVAR {contents = LINK t} -> inst t
-        | TVAR {contents = UNLINK x} as t -> (try List.assoc x cxt with Not_found -> t)
-        | TARR (t1, t2) -> TARR (inst t1, inst t2) in
-      inst in
+      let expr', t = infer ([], expr) in
+      expr' (), to_type t
+  end
 
-    let quantify (cxt, e1', t) =
-      let fvs = List.concat (List.map (fun (_, POLY (qvars, t)) -> diff (type_fvs t) qvars) cxt) in
-      let qvars = diff (type_fvs t) fvs in
-      let make_tlam e qvar = SysF.TLAM (qvar, e) in
-      (fun () -> List.fold_left make_tlam (e1' ()) qvars), POLY (qvars, t) in
+  module HM = struct
+    let rec to_type = function
+        TVAR {contents = UNLINK x} -> SysF.TVAR x
+      | TVAR {contents = LINK t} -> to_type t
+      | TARR (t1, t2) -> SysF.TARR (to_type t1, to_type t2)
 
-    let rec infer = function
-        cxt, VAR x ->
-          let POLY (qvars, t) = List.assoc x cxt in
-          let vars = List.map (fun qvar -> qvar, fresh_var ()) qvars in
-          let make_tap e (_, var) = SysF.TAP (e, to_SysF_typ var) in
-          (fun () -> List.fold_left make_tap (SysF.VAR x) vars), instantiate vars t
-      | cxt, LAM (x, e) ->
-          let t = fresh_var () in
-          let e', t' = infer ((x, POLY ([], t))::cxt, e) in
-          (fun () -> SysF.LAM (x, to_SysF_typ t, e' ())), TARR (t, t')
-      | cxt, (AP (e1, e2) as e) ->
-          let e1', t1 = infer (cxt, e1) in
-          let e2', t2 = infer (cxt, e2) in
-          let t = fresh_var () in begin
-            handled_unify (e, t1, TARR (t2, t), to_SysF_typ,
-                           [SHAPE_MISMATCH, sysf_no_unify; OCCURS_CHECK, sysf_infinite_type]);
-            (fun () -> SysF.AP (e1' (), e2' ())), t
-          end
-      | cxt, LET (x, e1, e2) ->
-          let e1', t = infer (cxt, e1) in
-          let e1'', t'' = quantify (cxt, e1', t) in
-          let e2', t' = infer ((x, t'')::cxt, e2) in
-          (fun () -> SysF.LET (x, e1'' (), e2' ())), t' in
+    exception No_unify of expr * SysF.typ * SysF.typ
+    let no_unify (e, t1, t2) = No_unify (e, t1, t2)
 
-    let expr, t = infer ([], expr) in
-    let expr', POLY (qvars', t') = quantify ([], expr, t) in
-    expr' (), List.fold_left (fun e qvar -> SysF.TALL (qvar, e)) (to_SysF_typ t') qvars'
+    exception Infinite_type of expr * SysF.typ * SysF.typ
+    let infinite_type (e, t1, t2) = Infinite_type (e, t1, t2)
+
+    type typescheme = POLY of string list * typ
+
+    let typeinfer expr =
+      let instantiate cxt =
+        let rec inst = function
+            TVAR {contents = LINK t} -> inst t
+          | TVAR {contents = UNLINK x} as t -> (try List.assoc x cxt with Not_found -> t)
+          | TARR (t1, t2) -> TARR (inst t1, inst t2) in
+        inst in
+
+      let quantify (cxt, e1', t) =
+        let fvs = List.concat (List.map (fun (_, POLY (qvars, t)) -> diff (type_fvs t) qvars) cxt) in
+        let qvars = diff (type_fvs t) fvs in
+        let make_tlam e qvar = SysF.TLAM (qvar, e) in
+        (fun () -> List.fold_left make_tlam (e1' ()) qvars), POLY (qvars, t) in
+
+      let rec infer = function
+          cxt, VAR x ->
+            let POLY (qvars, t) = List.assoc x cxt in
+            let vars = List.map (fun qvar -> qvar, fresh_var ()) qvars in
+            let make_tap e (_, var) = SysF.TAP (e, to_type var) in
+            (fun () -> List.fold_left make_tap (SysF.VAR x) vars), instantiate vars t
+        | cxt, LAM (x, e) ->
+            let t = fresh_var () in
+            let e', t' = infer ((x, POLY ([], t))::cxt, e) in
+            (fun () -> SysF.LAM (x, to_type t, e' ())), TARR (t, t')
+        | cxt, (AP (e1, e2) as e) ->
+            let e1', t1 = infer (cxt, e1) in
+            let e2', t2 = infer (cxt, e2) in
+            let t = fresh_var () in begin
+              handled_unify (e, t1, TARR (t2, t), to_type,
+                             [SHAPE_MISMATCH, no_unify; OCCURS_CHECK, infinite_type]);
+              (fun () -> SysF.AP (e1' (), e2' ())), t
+            end
+        | cxt, LET (x, e1, e2) ->
+            let e1', t = infer (cxt, e1) in
+            let e1'', t'' = quantify (cxt, e1', t) in
+            let e2', t' = infer ((x, t'')::cxt, e2) in
+            (fun () -> SysF.LET (x, e1'' (), e2' ())), t' in
+
+      let expr, t = infer ([], expr) in
+      let expr', POLY (qvars', t') = quantify ([], expr, t) in
+      expr' (), List.fold_left (fun e qvar -> SysF.TALL (qvar, e)) (to_type t') qvars'
+  end
 
   (* \x. x *)
   let e0 = LAM ("x", VAR "x")
@@ -420,22 +430,22 @@ struct
     let test_mono e = begin
       print_endline ("Inferring " ^ expr_to_string e);
       try
-        let (e', t) = typeinfer e in
+        let (e', t) = Mono.typeinfer e in
         print_endline ("  (" ^ STLC.expr_to_string e' ^ ") : " ^ STLC.typ_to_string t)
       with
-        STLC_infinite_type _
-      | STLC_no_unify _ -> print_endline "  not typeable"
+        Mono.Infinite_type _
+      | Mono.No_unify _ -> print_endline "  not typeable"
     end in
     print_endline "==== Testing simply-typed lambda calculus ====";
     List.iter test_mono [e0; e1; e2; e3; e4; e5];
     let test_poly e = begin
       print_endline ("Inferring " ^ expr_to_string e);
       try
-        let (e', t) = typeinfer_hm e in
+        let (e', t) = HM.typeinfer e in
         print_endline ("  (" ^ SysF.expr_to_string e' ^ ") : " ^ SysF.typ_to_string t)
       with
-        SysF_infinite_type _
-      | SysF_no_unify _ -> print_endline "  not typeable"
+        HM.Infinite_type _
+      | HM.No_unify _ -> print_endline "  not typeable"
     end in
     print_endline "==== Testing polymorphic lambda calculus ====";
     List.iter test_poly [e0; e1; e2; e3; e4; e5];
