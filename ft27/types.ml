@@ -58,7 +58,7 @@ struct
            TARR (t1, t2), t1' when t1 = t1' -> t2
          | t, t1' -> raise (Type_mismatch (cxt, e, t, TARR (t1', TVAR "_?"))))
       | cxt, LET (x, e1, e2) -> infer ((x,infer (cxt, e1))::cxt, e2) in
-      fun e -> infer ([], e)
+    fun e -> infer ([], e)
 
   (* \(x:A). x *)
   let e0 = LAM ("x", TVAR "A", VAR "x")
@@ -129,7 +129,7 @@ struct
   exception Type_mismatch of (string * typ) list * expr * typ * typ
   exception Malformed_type of string list * typ
 
-  let (expr_to_string, typ_to_string) =
+  let expr_to_string, typ_to_string =
     let rec showe = function
         d, VAR x -> x
       | d, LAM (x, t, e) -> paren (d > 0) ("\\(" ^ x ^ ":" ^ showt (0, t) ^ "). " ^ showe (0, e))
@@ -141,7 +141,7 @@ struct
         d, TVAR a -> a
       | d, TARR (t1, t2) -> paren (d > 0) (showt (1, t1) ^ " -> " ^ showt (0, t2))
       | d, TALL (a, t) -> paren (d > 0) ("\\/" ^ a ^ ". " ^ showt (0, t)) in
-    ((fun e -> showe (0, e)), (fun t -> showt (0, t)))
+    (fun e -> showe (0, e)), (fun t -> showt (0, t))
 
   (* /\A. \(x:A). x *)
   let e0 = TLAM ("A", LAM ("x", TVAR "A", VAR "x"))
