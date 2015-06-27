@@ -300,6 +300,21 @@ struct
 
   let fresh_var () = TVAR (ref (UNLINK (fresh_sym "T")))
 
+  let rec occurs = function
+      x, TVAR {contents = UNLINK x'} -> x = x'
+    | x, TVAR {contents = LINK t}  -> occurs (x, t)
+    | x, TARR (t1, t2) -> occurs (x, t1) || occurs (x, t2)
+
+  let rec unify = function
+      TVAR {contents = LINK t}, t' | t', TVAR {contents = LINK t} -> unify (t, t')
+    | TVAR ({contents = UNLINK x}), TVAR ({contents = UNLINK x'}) when x = x' -> ()
+    | TVAR ({contents = UNLINK x} as r), t | t, TVAR ({contents = UNLINK x} as r) ->
+        if occurs (x, t) then raise (UnifyError OCCURS_CHECK) else r := LINK t
+    | TARR (t1, t2), TARR (t1', t2') -> begin
+        unify (t1, t1');
+        unify (t2, t2')
+    end
+
   let typeinfer expr =
     let equations : (expr * typ * typ) list ref = ref [] in
 
@@ -313,21 +328,6 @@ struct
         (!equations) in
 
     let solve_equations () =
-      let rec occurs = function
-          x, TVAR {contents = UNLINK x'} -> x = x'
-        | x, TVAR {contents = LINK t }  -> occurs (x, t)
-        | x, TARR (t1, t2) -> occurs (x, t1) || occurs (x, t2) in
-
-      let rec unify = function
-          TVAR {contents = LINK t}, t' | t', TVAR {contents = LINK t} -> unify (t, t')
-        | TVAR ({contents = UNLINK x}), TVAR ({contents = UNLINK x'}) when x = x' -> ()
-        | TVAR ({contents = UNLINK x} as r), t | t, TVAR ({contents = UNLINK x} as r) ->
-            if occurs (x, t) then raise (UnifyError OCCURS_CHECK) else r := LINK t
-        | TARR (t1, t2), TARR (t1', t2') -> begin
-            unify (t1, t1');
-            unify (t2, t2')
-        end in
-
       List.iter (fun (e, t1, t2) ->
                   try unify (t1, t2) with
                     UnifyError SHAPE_MISMATCH -> raise (STLC_no_unify (e, to_STLC_typ t1, to_STLC_typ t2))
@@ -365,34 +365,12 @@ struct
   type typescheme = POLY of string list * typ
 
   let typeinfer_hm expr =
-    let fresh_sym =
-      let cnt = ref 0 in
-      fun () -> begin
-        cnt := !cnt + 1;
-        "t" ^ string_of_int (!cnt)
-      end in
-
     let instantiate cxt =
       let rec inst = function
           TVAR {contents = LINK t} -> inst t
         | TVAR {contents = UNLINK x} as t -> (try List.assoc x cxt with Not_found -> t)
         | TARR (t1, t2) -> TARR (inst t1, inst t2) in
       inst in
-
-    let rec occurs = function
-        x, TVAR {contents = UNLINK x'} -> x = x'
-      | x, TVAR {contents = LINK t}  -> occurs (x, t)
-      | x, TARR (t1, t2) -> occurs (x, t1) || occurs (x, t2) in
-
-    let rec unify = function
-        TVAR {contents = LINK t}, t' | t', TVAR {contents = LINK t} -> unify (t, t')
-      | TVAR ({contents = UNLINK x}), TVAR ({contents = UNLINK x'}) when x = x' -> ()
-      | TVAR ({contents = UNLINK x} as r), t | t, TVAR ({contents = UNLINK x} as r) ->
-          if occurs (x, t) then raise (UnifyError OCCURS_CHECK) else r := LINK t
-      | TARR (t1, t2), TARR (t1', t2') -> begin
-          unify (t1, t1');
-          unify (t2, t2')
-      end in
 
     let quantify (cxt, e1', t) =
       let fvs = List.concat (List.map (fun (_, POLY (qvars, t)) -> diff (type_fvs t) qvars) cxt) in
