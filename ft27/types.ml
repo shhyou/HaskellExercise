@@ -296,7 +296,9 @@ struct
   exception UnifyError of unify_error
 
   exception STLC_no_unify of expr * STLC.typ * STLC.typ
+  let stlc_no_unify (e, t1, t2) = STLC_no_unify (e, t1, t2)
   exception STLC_infinite_type of expr * STLC.typ * STLC.typ
+  let stlc_infinite_type (e, t1, t2) = STLC_infinite_type (e, t1, t2)
 
   let fresh_var () = TVAR (ref (UNLINK (fresh_sym "T")))
 
@@ -315,52 +317,38 @@ struct
         unify (t2, t2')
     end
 
+  let handled_unify (expr, t1, t2, to_type, exn_map) =
+    try unify (t1, t2) with
+      UnifyError exn_typ ->
+        raise (List.assoc exn_typ exn_map (expr, to_type t1, to_type t2))
+
   let typeinfer expr =
-    let equations : (expr * typ * typ) list ref = ref [] in
-
-    let add_equation eq = equations := eq::(!equations) in
-
-    let print_equations () =
-      List.iter
-        (fun (e, t1, t2) ->
-          print_endline (STLC.typ_to_string (to_STLC_typ t1) ^ " = "
-                       ^ STLC.typ_to_string (to_STLC_typ t2)))
-        (!equations) in
-
-    let solve_equations () =
-      List.iter (fun (e, t1, t2) ->
-                  try unify (t1, t2) with
-                    UnifyError SHAPE_MISMATCH -> raise (STLC_no_unify (e, to_STLC_typ t1, to_STLC_typ t2))
-                  | UnifyError OCCURS_CHECK -> raise (STLC_infinite_type (e, to_STLC_typ t1, to_STLC_typ t2)))
-                (!equations) in
-
-    let rec gen_cons = function
+    let rec infer = function
         cxt, VAR x -> (fun () -> STLC.VAR x), List.assoc x cxt
       | cxt, LAM (x, e) ->
           let t = fresh_var () in
-          let e', t' = gen_cons ((x, t)::cxt, e) in
+          let e', t' = infer ((x, t)::cxt, e) in
           (fun () -> STLC.LAM (x, to_STLC_typ t, e' ())), TARR (t, t')
       | cxt, (AP (e1, e2) as e) ->
-          let e1', t1 = gen_cons (cxt, e1) in
-          let e2', t2 = gen_cons (cxt, e2) in
+          let e1', t1 = infer (cxt, e1) in
+          let e2', t2 = infer (cxt, e2) in
           let t = fresh_var () in begin
-            add_equation (e, t1, TARR (t2, t));
+            handled_unify (e, t1, TARR (t2, t), to_STLC_typ,
+                           [SHAPE_MISMATCH, stlc_no_unify; OCCURS_CHECK, stlc_infinite_type]);
             (fun () -> STLC.AP (e1' (), e2' ())), t
           end
       | cxt, LET (x, e1, e2) ->
-          let e1', t = gen_cons (cxt, e1) in
-          let e2', t' = gen_cons ((x, t)::cxt, e2) in
+          let e1', t = infer (cxt, e1) in
+          let e2', t' = infer ((x, t)::cxt, e2) in
           (fun () -> STLC.LET (x, e1' (), e2' ())), t' in
 
-    let expr', t = gen_cons ([], expr) in
-    begin
-      print_equations ();
-      solve_equations ();
-      expr' (), to_STLC_typ t
-    end
+    let expr', t = infer ([], expr) in
+    expr' (), to_STLC_typ t
 
   exception SysF_no_unify of expr * SysF.typ * SysF.typ
+  let sysf_no_unify (e, t1, t2) = SysF_no_unify (e, t1, t2)
   exception SysF_infinite_type of expr * SysF.typ * SysF.typ
+  let sysf_infinite_type (e, t1, t2) = SysF_infinite_type (e, t1, t2)
 
   type typescheme = POLY of string list * typ
 
@@ -392,9 +380,8 @@ struct
           let e1', t1 = infer (cxt, e1) in
           let e2', t2 = infer (cxt, e2) in
           let t = fresh_var () in begin
-            (try unify (t1, TARR (t2, t)) with
-              UnifyError SHAPE_MISMATCH -> raise (SysF_no_unify (e, to_SysF_typ t1, to_SysF_typ t2))
-            | UnifyError OCCURS_CHECK -> raise (SysF_infinite_type (e, to_SysF_typ t1, to_SysF_typ t2)));
+            handled_unify (e, t1, TARR (t2, t), to_SysF_typ,
+                           [SHAPE_MISMATCH, sysf_no_unify; OCCURS_CHECK, sysf_infinite_type]);
             (fun () -> SysF.AP (e1' (), e2' ())), t
           end
       | cxt, LET (x, e1, e2) ->
