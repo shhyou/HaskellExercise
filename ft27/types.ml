@@ -26,6 +26,7 @@ module STLC : sig
   val typ_to_string : typ -> string
   val get_type : expr -> typ
   val test : unit -> unit
+
 end =
 struct
   type expr = VAR of string
@@ -90,6 +91,53 @@ struct
       test_check (e1, t1);
       test_check (e2, t2)
     end
+end
+
+module Bidir : sig
+  type expr = VAR of string
+            | ALAM of string * STLC.typ * expr
+            | LAM of string * expr
+            | AP  of expr * expr
+            | LET of string * expr * expr
+            | ANNO of expr * STLC.typ
+  exception Type_mismatch of (string * STLC.typ) list * expr * STLC.typ * STLC.typ
+  val typecheck : expr * STLC.typ -> STLC.expr
+  val typeinfer : expr -> STLC.expr * STLC.typ
+end =
+struct
+  type expr = VAR of string
+            | ALAM of string * STLC.typ * expr
+            | LAM of string * expr
+            | AP  of expr * expr
+            | LET of string * expr * expr
+            | ANNO of expr * STLC.typ
+
+  exception Type_mismatch of (string * STLC.typ) list * expr * STLC.typ * STLC.typ
+
+  let typecheck, typeinfer =
+    let rec check = function
+        cxt, LAM (x, e), STLC.TARR (t1, t2) -> STLC.LAM (x, t1,check ((x, t1)::cxt, e, t2))
+      | cxt, (LAM (_, _) as e), t ->
+          raise (Type_mismatch (cxt, e, t, STLC.TARR (STLC.TVAR "?1", STLC.TVAR "?2")))
+      | cxt, LET (x, e1, e2), t ->
+          let e1', t1 = infer (cxt, e1) in
+          STLC.LET (x, e1', check ((x,t1)::cxt, e2, t))
+      | cxt, e, t ->
+          let e', t' = infer (cxt, e) in
+          if t = t'
+            then e'
+            else raise (Type_mismatch (cxt, e, t, t'))
+    and infer = function
+        cxt, VAR x -> STLC.VAR x, List.assoc x cxt
+      | cxt, ALAM (x, t, e) ->
+          let e', t' = infer ((x,t)::cxt, e) in
+          STLC.LAM (x, t, e'), STLC.TARR (t, t')
+      | cxt, (AP (e1, e2) as e) ->
+          (match infer (cxt, e1) with
+            e1', STLC.TARR (t1, t2) -> STLC.AP (e1', check (cxt, e2, t1)), t2
+          | e1', t -> raise (Type_mismatch (cxt, e, t, STLC.TARR (STLC.TVAR "?1", STLC.TVAR "?2"))))
+      | cxt, ANNO (x, t) -> check (cxt, x, t), t in
+    (fun (expr, typ) -> check ([], expr, typ)), (fun expr -> infer ([], expr))
 end
 
 module SysF : sig
