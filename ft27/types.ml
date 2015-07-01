@@ -93,59 +93,6 @@ struct
     end
 end
 
-module Bidir : sig
-  type expr = VAR of string
-            | ALAM of string * STLC.typ * expr
-            | LAM of string * expr
-            | AP  of expr * expr
-            | LET of string * expr * expr
-            | ANNO of expr * STLC.typ
-  exception Type_mismatch of (string * STLC.typ) list * expr * STLC.typ * STLC.typ
-  exception Cannot_infer of expr
-  val typecheck : expr * STLC.typ -> STLC.expr
-  val typeinfer : expr -> STLC.expr * STLC.typ
-end =
-struct
-  type expr = VAR of string
-            | ALAM of string * STLC.typ * expr
-            | LAM of string * expr
-            | AP  of expr * expr
-            | LET of string * expr * expr
-            | ANNO of expr * STLC.typ
-
-  exception Type_mismatch of (string * STLC.typ) list * expr * STLC.typ * STLC.typ
-  exception Cannot_infer of expr
-
-  let typecheck, typeinfer =
-    let rec check = function
-        cxt, LAM (x, e), STLC.TARR (t1, t2) -> STLC.LAM (x, t1,check ((x, t1)::cxt, e, t2))
-      | cxt, (LAM (_, _) as e), t ->
-          raise (Type_mismatch (cxt, e, t, STLC.TARR (STLC.TVAR "?1", STLC.TVAR "?2")))
-      | cxt, LET (x, e1, e2), t ->
-          let e1', t1 = infer (cxt, e1) in
-          STLC.LET (x, e1', check ((x,t1)::cxt, e2, t))
-      | cxt, e, t ->
-          let e', t' = infer (cxt, e) in
-          if t = t'
-            then e'
-            else raise (Type_mismatch (cxt, e, t, t'))
-    and infer = function
-        cxt, VAR x -> STLC.VAR x, List.assoc x cxt
-      | cxt, ALAM (x, t, e) ->
-          let e', t' = infer ((x,t)::cxt, e) in
-          STLC.LAM (x, t, e'), STLC.TARR (t, t')
-      | cxt, (AP (e1, e2) as e) ->
-          (match infer (cxt, e1) with
-            e1', STLC.TARR (t1, t2) -> STLC.AP (e1', check (cxt, e2, t1)), t2
-          | e1', t -> raise (Type_mismatch (cxt, e, t, STLC.TARR (STLC.TVAR "?1", STLC.TVAR "?2"))))
-      | cxt, LET (x, e1, e2) ->
-          let e1', t1 = infer (cxt, e1) in
-          STLC.LET (x, e1', infer ((x,t1)::cxt, e2))
-      | cxt, ANNO (x, t) -> check (cxt, x, t), t
-      | cxt, e -> raise (Cannot_infer (cxt, e))
-    (fun (expr, typ) -> check ([], expr, typ)), (fun expr -> infer ([], expr))
-end
-
 module SysF : sig
   type expr = VAR  of string
             | LAM  of string * typ * expr
@@ -291,29 +238,8 @@ module LC : sig
             | LET of string * expr * expr
 
   val expr_to_string : expr -> string
-
-  module Mono : sig
-    exception No_unify of expr * STLC.typ * STLC.typ
-    exception Infinite_type of expr * STLC.typ * STLC.typ
-    val typeinfer : expr -> STLC.expr * STLC.typ
-  end
-
-  module HM : sig
-    exception No_unify of expr * SysF.typ * SysF.typ
-    exception Infinite_type of expr * SysF.typ * SysF.typ
-    val typeinfer : expr -> SysF.expr * SysF.typ
-  end
-
-  val test : unit -> unit
 end =
 struct
-  let fresh_sym =
-    let cnt = ref 0 in
-    fun prefix -> begin
-      cnt := !cnt + 1;
-      prefix ^ string_of_int (!cnt)
-    end
-
   type expr = VAR of string
             | LAM of string * expr
             | AP  of expr * expr
@@ -326,6 +252,97 @@ struct
       | d, AP (e1, e2) -> paren (d > 10) (showe (10, e1) ^ " " ^ showe (11, e2))
       | d, LET (x, e1, e2) -> paren (d > 0) ("let " ^ x ^ " = " ^ showe (0, e1) ^ " in " ^ showe (0, e2)) in
     fun e -> showe (0, e)
+end
+
+module Bidir : sig
+  type expr = VAR of string
+            | ALAM of string * STLC.typ * expr
+            | LAM of string * expr
+            | AP  of expr * expr
+            | LET of string * expr * expr
+            | ANNO of expr * STLC.typ
+  val expr_to_string : expr -> string
+  exception Type_mismatch of (string * STLC.typ) list * expr * STLC.typ * STLC.typ
+  exception Infer_failed of expr
+  val typecheck : expr * STLC.typ -> STLC.expr
+  val typeinfer : expr -> STLC.expr * STLC.typ
+end =
+struct
+  type expr = VAR of string
+            | ALAM of string * STLC.typ * expr
+            | LAM of string * expr
+            | AP  of expr * expr
+            | LET of string * expr * expr
+            | ANNO of expr * STLC.typ
+
+  let expr_to_string =
+    let rec showe = function
+        d, VAR x -> x
+      | d, ALAM (x, t, e) -> paren (d > 0) ("\\(" ^ x ^ ":" ^ STLC.typ_to_string t ^ "). " ^ showe (0, e))
+      | d, LAM (x, e) -> paren (d > 0) ("\\" ^ x ^ ". " ^ showe (0, e))
+      | d, AP (e1, e2) -> paren (d > 10) (showe (10, e1) ^ " " ^ showe (11, e2))
+      | d, LET (x, e1, e2) -> paren (d > 0) ("let " ^ x ^ " = " ^ showe (0, e1) ^ " in " ^ showe (0, e2))
+      | d, ANNO (e, t) -> paren (d > 0) (showe (1, e) ^ " : " ^ STLC.typ_to_string t) in
+    fun e -> showe (0, e)
+
+  exception Type_mismatch of (string * STLC.typ) list * expr * STLC.typ * STLC.typ
+  exception Infer_failed of expr
+
+  let typecheck, typeinfer =
+    let rec check = function
+        cxt, LAM (x, e), STLC.TARR (t1, t2) -> STLC.LAM (x, t1,check ((x, t1)::cxt, e, t2))
+      | cxt, (LAM (_, _) as e), t ->
+          raise (Type_mismatch (cxt, e, t, STLC.TARR (STLC.TVAR "?1", STLC.TVAR "?2")))
+      | cxt, LET (x, e1, e2), t ->
+          let e1', t1 = infer (cxt, e1) in
+          STLC.LET (x, e1', check ((x,t1)::cxt, e2, t))
+      | cxt, e, t ->
+          let e', t' = infer (cxt, e) in
+          if t = t'
+            then e'
+            else raise (Type_mismatch (cxt, e, t, t'))
+    and infer = function
+        cxt, VAR x -> STLC.VAR x, List.assoc x cxt
+      | cxt, ALAM (x, t, e) ->
+          let e', t' = infer ((x,t)::cxt, e) in
+          STLC.LAM (x, t, e'), STLC.TARR (t, t')
+      | cxt, (AP (e1, e2) as e) ->
+          (match infer (cxt, e1) with
+            e1', STLC.TARR (t1, t2) -> STLC.AP (e1', check (cxt, e2, t1)), t2
+          | e1', t -> raise (Type_mismatch (cxt, e, t, STLC.TARR (STLC.TVAR "?1", STLC.TVAR "?2"))))
+      | cxt, LET (x, e1, e2) ->
+          let e1', t1 = infer (cxt, e1) in
+          let e2', t2 = infer ((x,t1)::cxt, e2) in
+          STLC.LET (x, e1', e2'), t2
+      | cxt, ANNO (x, t) -> check (cxt, x, t), t
+      | cxt, e -> raise (Infer_failed e) in
+    (fun (expr, typ) -> check ([], expr, typ)), (fun expr -> infer ([], expr))
+end
+
+module Infer : sig
+  module Mono : sig
+    exception No_unify of LC.expr * STLC.typ * STLC.typ
+    exception Infinite_type of LC.expr * STLC.typ * STLC.typ
+    val typeinfer : LC.expr -> STLC.expr * STLC.typ
+  end
+
+  module HM : sig
+    exception No_unify of LC.expr * SysF.typ * SysF.typ
+    exception Infinite_type of LC.expr * SysF.typ * SysF.typ
+    val typeinfer : LC.expr -> SysF.expr * SysF.typ
+  end
+
+  val test : unit -> unit
+end =
+struct
+  open LC
+
+  let fresh_sym =
+    let cnt = ref 0 in
+    fun prefix -> begin
+      cnt := !cnt + 1;
+      prefix ^ string_of_int (!cnt)
+    end
 
   (* meta type *)
   (* code reference: http://okmij.org/ftp/ML/generalization.html *)
