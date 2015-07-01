@@ -101,6 +101,7 @@ module Bidir : sig
             | LET of string * expr * expr
             | ANNO of expr * STLC.typ
   exception Type_mismatch of (string * STLC.typ) list * expr * STLC.typ * STLC.typ
+  exception Cannot_infer of expr
   val typecheck : expr * STLC.typ -> STLC.expr
   val typeinfer : expr -> STLC.expr * STLC.typ
 end =
@@ -113,6 +114,7 @@ struct
             | ANNO of expr * STLC.typ
 
   exception Type_mismatch of (string * STLC.typ) list * expr * STLC.typ * STLC.typ
+  exception Cannot_infer of expr
 
   let typecheck, typeinfer =
     let rec check = function
@@ -136,7 +138,11 @@ struct
           (match infer (cxt, e1) with
             e1', STLC.TARR (t1, t2) -> STLC.AP (e1', check (cxt, e2, t1)), t2
           | e1', t -> raise (Type_mismatch (cxt, e, t, STLC.TARR (STLC.TVAR "?1", STLC.TVAR "?2"))))
-      | cxt, ANNO (x, t) -> check (cxt, x, t), t in
+      | cxt, LET (x, e1, e2) ->
+          let e1', t1 = infer (cxt, e1) in
+          STLC.LET (x, e1', infer ((x,t1)::cxt, e2))
+      | cxt, ANNO (x, t) -> check (cxt, x, t), t
+      | cxt, e -> raise (Cannot_infer (cxt, e))
     (fun (expr, typ) -> check ([], expr, typ)), (fun expr -> infer ([], expr))
 end
 
