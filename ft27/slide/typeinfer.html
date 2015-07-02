@@ -266,7 +266,7 @@ $\displaystyle \frac{(x:t)\in \Gamma}{\Gamma \vdash x:t} \quad \quad \frac{\Gamm
       check((x,t) :: cxt,  e,  t')
     ```
 
-- To infer, .delete[divine] $x$ needs annotaiton.
+- To infer, .delete[divine] $x$ needs an annotation.
 
     ```haskell
     function infer(cxt, ALAM (x, t, e)):
@@ -297,8 +297,377 @@ $\displaystyle \frac{(x:t)\in \Gamma}{\Gamma \vdash x:t} \quad \quad \frac{\Gamm
     ```
 ---
 # An Equational Approach
+- The case $e_1\, e_2$
+    1. $e_1:\alpha\to\beta$
+    1. $e_2:\alpha$
+    1. $e_1\,e_2:\beta$
+
+- Does not knowing $\alpha$ really matter?
+
+    * Set up a constraint and solve it latter!
+
+    * Let $e_1 : t$ and $e_2:t'$
+
+    * $t=t'\to t''$ for some unknown $t''$
+---
+# An Equational Approach
+
+.center[.redbbox[$\lambda f.\lambda z. f z z$]]
+
+- Allocate fresh unknown $t_1$
+
+.pull-left[
+]
+
+.pull-right[
+- Case $\lambda x.e$ with $x :\equiv f$,$e:\equiv \lambda z. f z z$
+    * $x:\alpha$
+    * $e:\beta$
+    * $(\lambda x.e):\alpha\to\beta$
+
+- Context: $[]$
+]
+
+Now $f:t_1$
+---
+# An Equational Approach
+
+.center[$\lambda f.$.redbbox[$\lambda z. f z z$]]
+
+- Allocate fresh unknown $t_2$
+
+.pull-left[
+]
+
+.pull-right[
+- Case $\lambda x.e$ with $x :\equiv z$,$e:\equiv f z z$
+    * $x:\alpha$
+    * $e:\beta$
+    * $(\lambda x.e):\alpha\to\beta$
+
+- Context: $[(f\colon t_1)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$.redbbox[$f z z$]]
+
+- Recursion.
+
+.pull-left[
+]
+
+.pull-right[
+- Case $e_1\,e_2$ with $e_1 :\equiv fz$,$e_2:\equiv z$
+    * $e_1:\alpha\to\beta$
+    * $e_2:\alpha$
+    * $e_1\,e_2:\beta$
+
+- Context: $[(f\colon t_1),(z\colon t_3)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$.redbbox[$f z$] $z$]
+
+- Recursion.
+
+.pull-left[
+]
+
+.pull-right[
+- Case $e_1\,e_2$ with $e_1 :\equiv f$,$e_2:\equiv z$
+    * $e_1:\alpha\to\beta$
+    * $e_2:\alpha$
+    * $e_1\,e_2:\beta$
+
+- Context: $[(f\colon t_1),(z\colon t_3)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$.redbbox[$f$] $z z$]
+
+- Lookup context and return $t_1$.
+
+.pull-left[
+]
+
+.pull-right[
+- Case $e_1\,e_2$ with $e_1 :\equiv f$,$e_2:\equiv z$
+    * $e_1:\alpha\to\beta$
+    * $e_2:\alpha$
+    * $e_1\,e_2:\beta$
+
+- Context: $[(f\colon t_1),(z\colon t_3)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$ $f$.redbbox[$z$]$z$]
+
+- Lookup context and return $t_2$.
+
+.pull-left[
+]
+
+.pull-right[
+- Case $e_1\,e_2$ with $e_1 :\equiv f$,$e_2:\equiv z$
+    * $e_1:\alpha\to\beta$
+    * $e_2:\alpha$
+    * $e_1\,e_2:\beta$
+
+- Context: $[(f\colon t_1),(z\colon t_3)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$.redbbox[$f z$]$z$]
+
+- Allocate fresh unknown $t_3$. Return $t_3$.
+
+.pull-left[
+$t_1=t_2\to t_3$
+]
+
+.pull-right[
+- Case $e_1\,e_2$ with $e_1 :\equiv f$,$e_2:\equiv z$
+    * $e_1:\alpha\to\beta$
+    * $e_2:\alpha$
+    * $e_1\,e_2:\beta$
+
+- Context: $[(f\colon t_1),(z\colon t_3)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$ $fz$.redbbox[$z$]]
+
+- Lookup context and return $t_2$.
+
+.pull-left[
+$t_1=t_2\to t_3$
+]
+
+.pull-right[
+- Case $e_1\,e_2$ with $e_1 :\equiv fz$,$e_2:\equiv z$
+    * $e_1:\alpha\to\beta$
+    * $e_2:\alpha$
+    * $e_1\,e_2:\beta$
+
+- Context: $[(f\colon t_1),(z\colon t_3)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$.redbbox[$f z z$]]
+
+- Allocate fresh unknown $t_4$. Return $t_4$.
+
+.pull-left[
+$t_1=t_2\to t_3$<br>
+$t_3=t_2\to t_4$
+]
+
+.pull-right[
+- Case $e_1\,e_2$ with $e_1 :\equiv fz$,$e_2:\equiv z$
+    * $e_1:\alpha\to\beta$
+    * $e_2:\alpha$
+    * $e_1\,e_2:\beta$
+
+- Context: $[(f\colon t_1),(z\colon t_3)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3$
+---
+# An Equational Approach
+
+.center[$\lambda f.$.redbbox[$\lambda z.f z z$]]
+
+- Return $t_2\to t_4$
+
+.pull-left[
+$t_1=t_2\to t_3$<br>
+$t_3=t_2\to t_4$
+]
+
+.pull-right[
+- Case $\lambda x.e$ with $x :\equiv z$,$e:\equiv f z z$
+    * $x:\alpha$
+    * $e:\beta$
+    * $(\lambda x.e):\alpha\to\beta$
+
+- Context: $[(f\colon t_1)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3 \quad\quad fzz:t_4$
+---
+# An Equational Approach
+
+.center[.redbbox[$\lambda f.\lambda z. f z z$]]
+
+- Return $t_1\to (t_2\to t_4)$
+
+.pull-left[
+$t_1=t_2\to t_3$<br>
+$t_3=t_2\to t_4$
+]
+
+.pull-right[
+- Case $\lambda x.e$ with $x :\equiv f$,$e:\equiv \lambda z. f z z$
+    * $x:\alpha$
+    * $e:\beta$
+    * $(\lambda x.e):\alpha\to\beta$
+
+- Context: $[]$
+]
+
+Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3 \quad\quad fzz:t_4 \quad\quad (\lambda z.fzz):t_2\to t_4$
+---
+# Solving Equations
+- At top level: $(\lambda f.\lambda z. f z z):t_1\to t_2\to t_4$
+
+- Now $(f:t_1), (z:t_2), (fz:t_3), (fzz:t_4)$ and $(\lambda z.fzz):t_2\to t_4$ with
+
+    $t_1=t_2\to t_3$<br>
+    $t_3=t_2\to t_4$
+---
+# Solving Equations
+- At top level: $(\lambda f.\lambda z. f z z):(t_2\to t_3)\to t_2\to t_4$
+
+- Now $(f:t_2\to t_3), (z:t_2), (fz:t_3), (fzz:t_4)$ and $(\lambda z.fzz):t_2\to t_4$ with
+
+    $t_1=t_2\to t_3$<br>
+    $t_3=t_2\to t_4$
+
+- Substitute $t_2\to t_3$ for $t_1$!
+---
+# Solving Equations
+- At top level: $(\lambda f.\lambda z. f z z):(t_2\to t_2\to t_4)\to t_2\to t_4$
+
+- Now $(f:t_2\to t_2\to t_4), (z:t_2), (fz:t_2\to t_4), (fzz:t_4)$ and $(\lambda z.fzz):t_2\to t_4$ with
+
+    $t_1=t_2\to t_3$<br>
+    $t_3=t_2\to t_4$
+
+- Substitute $t_2\to t_4$ for $t_3$!
+
+--
+
+.center[.greenbbox[$(\lambda f.\lambda z. f z z):(A\to A\to B)\to A\to B$]]
+---
+# Disjoint Sets to the Rescue
+
+- Union and Find!
+
+- Our data type for meta-types:
+
+    ```haskell
+    type typ = TVAR of (metavar ref)
+             | TARR of typ * typ
+    and metavar = UNBOUND of string
+                | LINK of typ
+    ```
+
+    * A `'a ref` is a mutable variable of type `'a`
+
+- Example
+
+    ```haskell
+    let tvar = ref (UNBOUND "x")
+    let t = TARR (TVAR tvar, TVAR var)
+    print t
+    --  => x -> x
+
+    let t' = TVAR (ref (UNBOUND "A"))
+    tvar := BOUND (TARR (t', t'))
+    print t
+    --  => (t -> t) -> t -> t
+    ```
+---
+# Unification: Solve an Equation
+- $t\_i = T$ (or $= (\\\_ \to \\\_), ...$) &Rightarrow; substitute RHS for $t\_i$ (*)
+
+- $t_1\to t_2=t_3\to t_4$ &Rightarrow; Solve $t_1=t_3$, $t_2=t_4$ recursively.
+
+```haskell
+function unify(TVAR (r = LINK t), t'):   -- &leftarrow; Find
+  unify(t, t')
+
+function unify(TVAR (r = UNBOUND x), TVAR (s = UNBOUND y)), x == y:
+  no-op
+
+function unify(TVAR (r = UNBOUND x), t): -- &leftarrow; Union
+  if occurs(x, t):  -- &leftarrow; See &diamond;&diamond;page
+    ERROR!!
+  r := t
+
+function unify(TARR (t1, t2), TARR (t3, t4)):
+  unify(t1, t3)
+  unify(t2, t4)
+```
+
+- The case for `t, TVAR _` the same
+---
+# Final Step
+- Case $x$
+    ```haskell
+    function typeinfer(cxt, VAR x):
+      return (lookup x in cxt)
+    ```
+
+- Case $e_1\,e_2$
+    ```haskell
+    function typeinfer(cxt, AP (e1, e2)):
+      let t1 = typeinfer(cxt, e1)
+      let t2 = typeinfer(cxt, e2)
+      let t = fresh_var()
+      unify(t1, TARR (t2, t))
+      return t
+    ```
+
+- Case $\lambda x.e$
+    ```haskell
+    function typeinfer(cxt, LAM (x, e)):
+      let t = fresh_var()
+      return (TARR (t, typeinfer((x,t) :: cxt,  e)))
+    ```
+---
+# Occurs Check
+- Infer $\lambda x.xx$: Get equation $x:t_1$, $xx:t_2$ and $t_1=t_1\to t_2$
+
+    * Cannot eliminate $t_1$ by substituting $t_1\to t_2$ for $t_1$!
+
+.center[XXX TODO INSERT FIGURE HERE]
+
+- In equation $t_i = T$, it's an error if $t_i$ occurs in $T$.
 ---
 # Polymorphism: Generic the Easy Way
+- C++ Style:
+
+    ```cpp
+    template&lt;typename a&gt; a id(a x) { return x; }
+    id&lt;int&gt;(...)
+    id&lt;shared_ptr&lt;expr_t&gt;&gt;(...)
+    ```
+
+    Different code (semantics) when instantiated with different types
+
+- Functional Style:
 ---
 # Upgrading our Algorithm
 ---
