@@ -81,6 +81,29 @@ t2(*)(t1)        (roughly)
     </tr>
   </tbody>
 </table>
+---
+# Examples
+- Slide: $\lambda x.\lambda f. f\,x$
+
+- Code:
+
+    `LAM ("x", LAM ("f", AP (VAR "f", VAR "x")))`
+
+- Javascript
+  ```javascript
+    function (x) {
+      return function(f) { return f(x); }
+    }
+  ```
+
+- C++ (roughly):
+    ```cpp
+    [](auto x) {
+      return [=](auto f) {
+        return f(x);
+      }
+    }
+    ```
 
 ---
 # What Are Contexts
@@ -660,7 +683,7 @@ function unify(TARR (t1, t2), TARR (t3, t4)):
 - C++ Style:
 
     ```cpp
-    template&lt;typename a&gt; a id(a x) { return x; }
+    template&lt;typename a&gt;    a id(a x) { return x; }
     id&lt;int&gt;(...)
     id&lt;shared_ptr&lt;expr_t&gt;&gt;(...)
     ```
@@ -668,8 +691,159 @@ function unify(TARR (t1, t2), TARR (t3, t4)):
     Different code (semantics) when instantiated with different types
 
 - Functional Style:
+
+    * $(\lambda x.x):A\to A$ : OK.
+    * $(\lambda x.x):B\to B$ : OK.
+    * The same term $(\lambda x.x) : T\to T$ is OK for any type $T$!
+    * Let give it the type $\forall T.\, T\to T$
+---
+# Polymorphism: Girard's System F
+
+<table>
+  <thead>
+    <tr>
+      <th>
+        In Slide
+      </th>
+      <th>
+        In Code
+      </th>
+      <th>
+        Analogy
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>$\Lambda \alpha.e$</td>
+      <td><pre>TLAM ("a", e)</pre></td>
+      <td><pre><code class="hljs">def foo[a](...) = ...
+fn bar&amp;lt;a&amp;gt;(...) { ... }
+template&amp;lt;typename a&amp;gt; e
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>$e\;[t]$</td>
+      <td><pre>TAP (e, t)</pre></td>
+      <td><pre><code class="hljs">e&amp;lt;t&amp;gt;()
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>A</td>
+      <td><pre>TVAR "A"</pre></td>
+      <td><pre><code class="hljs">a, T (Haskell)
+typename A, T    (roughly)
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>$t_1 \to t_2$</td>
+      <td><pre>TARR (t1, t2)</pre></td>
+      <td><pre><code class="hljs">t1 -> t2
+function&amp;lt;t2(t1)&amp;gt;
+t2(*)(t1)        (roughly)
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>$\forall a. t$</td>
+      <td><pre>TALL (a, t)</pre></td>
+      <td><pre><code class="hljs">forall a. t
+
+{a : Set l} &rightarrow; t
+
+&forall;{a} &rightarrow; t
+</code></pre></td>
+    </tr>
+  </tbody>
+</table>
+---
+# Examples
+- Slide &amp; Code: $\Lambda a. \Lambda b. \lambda(x\colon a).\lambda(f\colon a\to b). f x$
+
+    ```haskell
+    TALL("a", TALL ("b",
+      LAM ("x", TVAR "A",
+        LAM ("f", TARR (TVAR "A", TVAR "B"),
+          AP (VAR "f", VAR "x")))))
+    ```
+
+- Rust: (**not sure**)
+
+    ```rust
+    fn app&lt;A,B&gt;(x : A, f : fn(A) -> B) -> B {
+      f(x)
+    }
+    ```
+
+- C++ (roughly):
+    ```cpp
+    template&lt;typename A,typename B&gt;
+    B app(A x, function&lt;B(A)&gt; f) {
+      return f(x);
+    }
+    ```
+---
+# Damas-Hindley-Milner System
+- Generalize at `let`. $\forall$-quantifiers are only allowed at $\`\`$top$"$ level
+
+    * $\forall a.\forall b. a\to b\to b$ : OK
+    * $\forall a.\forall b. b\to (a\to b)\to b$ : OK
+    * $(\forall a. a\to a)\to\mathtt{Int}$ : Not OK
+
+- A type together with a list of $\forall$-quantified variables
+
+    ```haskell
+    type typescheme = POLY of string list * typ
+    ```
+
+- Generalization: (Not typeable in previous systems!)
+
+    $\mathbf{let}\; \mathit{id} = \lambda x.x\; \mathbf{in}$ &Leftarrow; Generalize at this point<br>
+    $\mathit{id}\; \mathit{id}\;\mathit{id}$
+---
+# Damas-Hindley-Milner System
+$\mathbf{let}\; \mathit{id} = $ .redbbox[$\lambda x.x$] $\mathbf{in}$<br>
+$\mathit{id}\; \mathit{id}\;\mathit{id}$
+
+- Inferred to be $t_1\to t_1$ by the preceding algorithm.<br>
+- $t_1$ is free: `UNBOUND "t1"`.
+---
+# Damas-Hindley-Milner System
+$\mathbf{let}$ .redbbox[$\mathit{id}$] $= \lambda x.x\; \mathbf{in}$<br>
+$\mathit{id}\; \mathit{id}\;\mathit{id}$
+
+- Generalize unbound free variables ($t_1$ in this case)
+- $\mathit{id} : \forall t_1.\,t_1\to t_1$
+---
+# Damas-Hindley-Milner System
+$\mathbf{let}\; \mathit{id} = \Lambda t_1.\lambda (x\colon t_1).x\; \mathbf{in}$<br>
+.redbbox[$\mathit{id}\,[(t_2\to t_2)\to t_2\to t_2]\,\mathit{id}\,[t_2\to t_2]\,\mathit{id}\,[t_2]$]
+
+- Being explicit...
+
+- Each use of $\mathit{id}$ is of different type. $t_2$ is another unbound type variable.
+
 ---
 # Upgrading our Algorithm
+
+- Case $x$: Instantiate the term. Replace $\forall$-quantified type variables
+    with fresh type variables.
+
+      ```haskell
+      function typeinfer(cxt, VAR x):
+        return (instantiate(lookup x in cxt))
+      ```
+
+    * Instantiate: $\forall a. \forall b. a \to (a \to b) \to b$ becomes
+        $t_i\to (t_i\to t_j)\to t_j$ for fresh variable $t_i$,$t_j$
+
+- Case $\mathbf{let}$
+    ```haskell
+    function typeinfer(cxt, LET (x, e1, e2)):
+      let t1 = typeinfer(cxt, e1)
+      return typeinfer((x,&forall;a.t1) :: cxt,  e2)
+    ```
+
+    * Quantify: calculate free variables `a` in `t1`.
 ---
 # References
 1. Frank Pfenning. CMU CS15-312 *Foundations of Programming Languages*
