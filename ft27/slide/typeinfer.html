@@ -13,7 +13,7 @@ class: title, inverse, center, middle
 ---
 # Language Syntax (Incomplete)
 
-<table>
+<table style="padding: 1px; margin: 1px;">
   <thead>
     <tr>
       <th>
@@ -64,8 +64,24 @@ e1(e2)
 val x = e1; e2
 </code></pre></td>
     </tr>
+    <tr>
+      <td>A</td>
+      <td><pre>TVAR "A"</pre></td>
+      <td><pre><code class="hljs">a, T (Haskell)
+typename A, T    (roughly)
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>$t_1 \to t_2$</td>
+      <td><pre>TARR (t1, t2)</pre></td>
+      <td><pre><code class="hljs">t1 -> t2
+function&amp;lt;t2(t1)&amp;gt;
+t2(*)(t1)        (roughly)
+</code></pre></td>
+    </tr>
   </tbody>
 </table>
+
 ---
 # What Are Contexts
 
@@ -85,22 +101,24 @@ val x = e1; e2
 - A recurring theme
 
     ```ocaml
-    f (cxt, LAM (x, t, e)) = ... f ((x,t) :: cxt, e) ...
+    f (cxt, LAM (x, t, e)) = .... f ((x,t) :: cxt, e) ....
     ```
 ---
 # How Type Systems are Defined
-- When $e_1\; e_2$ occurs in some context `cxt`, for some $\alpha,\beta$ we will have...
-    * $e_1$ has type $\alpha\to\beta$ in the context `cxt`
-    * $e_2$ has type $\alpha$ in the context `cxt`
-    * $e_1\; e_2$ has type $\beta$ in the context `cxt`
+- $e:t$ means $e$ has type $t$
 
-- The definition a sort of relation, and it holds iff the $\$\$$shape$"$ is correct.
-    * $e_1\; e_2$ with $e_1 \colon \mathbf{char} \to \mathbf{int}$, $e_2 \colon \mathbf{char}$: OK
-    * $e_1\; e_2$ with $e_1 \colon \mathbf{bool} \to \mathbf{string}$, $e_2 \colon \mathbf{int}$: NO
-    * $e_1\; e_2$ with $e_1 \colon \mathbf{int}$, $e_2 \colon ???$: NO
+- When $e_1\, e_2$ occurs in some context `cxt`, for some $\alpha,\beta$ we will have...
+    * $e_1 : \alpha\to\beta$ in `cxt`
+    * $e_2 : \alpha$ in `cxt`
+    * $e_1\, e_2 : \beta$ in `cxt`
+
+- The definition is a sort of relation and it holds iff the $\`\`$shape$"$ is correct.
+    * $e_1\, e_2$ with $e_1 : \mathbf{char} \to \mathbf{int}$, $e_2 : \mathbf{char}$: OK
+    * $e_1\, e_2$ with $e_1 : \mathbf{bool} \to \mathbf{string}$, $e_2 : \mathbf{int}$: NO
+    * $e_1\, e_2$ with $e_1 : \mathbf{int}$: NO
 ---
 # Other rules
-- $x$ has type $t$ precisely when $(x\colon t)\in\mathtt{cxt}$ (We lookup
+- $x$ has type $t$ precisely when $(x\colon t)\in\mathtt{cxt}$<br>(Lookup
     the type of $x$ in the current context)
 - When $\lambda x.e$ occurs the context `cxt`, for some $\alpha,\beta$ ...
     * $x$ has type $\alpha$
@@ -112,22 +130,22 @@ val x = e1; e2
 
     // 'x' has type 'int'
     // 'x == 0' has type 'bool'
-    // 'f' has type  'bool(*)(int)', or roughly 'int -> bool'
+    // 'f' (will) has type  'bool(*)(int)', or roughly 'int -> bool'
     ```
 
 - The case for $\lambda (x\colon t).e$ is similar. Just that $x$ has type $t$.
 ---
 # Problems with Typing Rules
 - $e_1\;e_2$ : $\exists \alpha,\beta$ s.t. ...
-    * $e_1\colon\alpha\to\beta$
+    * $e_1:\alpha\to\beta$
     * $e_2:\alpha$
     * $e_1\;e_2:\beta$
     *  There's simply no clue for $\alpha$ even if we know $\beta$.
 
 - $\lambda x.e$ : $\exists \alpha,\beta$ s.t. ...
-    * $x\colon \alpha$
-    * $e\colon \beta$
-    * $(\lambda x.e)\colon \alpha\to\beta$
+    * $x : \alpha$
+    * $e : \beta$
+    * $(\lambda x.e) : \alpha\to\beta$
     * Gotta know $\alpha\to\beta$ in order to proceed. Or do we?
 
 ---
@@ -140,7 +158,9 @@ val x = e1; e2
 
     * Hence we can *infer* the type of $e$.
 
-- $e_1\; e_2$ : Infer the type of $e_1$ and $e_2$, respectively. Check their shape.
+- $x$ : Lookup `cxt`
+
+- $e_1\, e_2$ : Infer the type of $e_1$ and $e_2$, respectively. Check their shape.
 
 - $\lambda (x\colon t).e$ : Infer the type (say $t'$) of $e$. Then the type of
   $\lambda (x\colon t).e$ is $t\to t'$
@@ -159,14 +179,136 @@ let rec infer = function
        TARR (t1, t2), t1' when t1 = t1' -> t2
      | _ -> ERROR!!!
 ```
+
+- Problem: it's too verbose
+
+    ```haskell
+    \(z : A). let ididid = \(h : (A &rightarrow; A) &rightarrow; A &rightarrow; A). h in
+
+              ididid (\(f : A &rightarrow; A). f) (\(x:A).x) z
+    ```
+
+    - Why bother annotating $f$ and $x$ if the type of $\mathit{ididid}$ is known
+        (hence the type of its argumetns)?
+
 ---
 # Improvement via Bidirectional Typing
+
+- Another motivation: Originally, the typing rules are relations and might not be
+    syntax-directed
+
+$\displaystyle \frac{(x:t)\in \Gamma}{\Gamma \vdash x:t} \quad \quad \frac{\Gamma,(x\colon t)\vdash e:t'}{\Gamma \vdash (\lambda x.e):t\to t'} \quad\quad \frac{\Gamma \vdash e_1:t\to t' \quad \Gamma \vdash e_2:t}{\Gamma \vdash e_1\,e_2:t'}$
+
+--
+
+- Annotate judgments with I/O modes to get a function
+
+\\[ \Gamma\_\mathtt{in} \vdash x\_\mathtt{in}:t\_\mathtt{out}\\]
+
+\\[ \text{recursive call} \Uparrow\;\; \frac{(\Gamma,x\colon t)\_\mathtt{shown\\\_in}\vdash e:t'\_\mathtt{assumed\\\_out}}{\Gamma\_\mathtt{assumed\\\_in} \vdash (\lambda x.e):(t\to t')\_\mathtt{shown\\\_out}} \;\; \Downarrow \text{return} \\]
+
+- Separating type **checking** and **inference**:
+
+\\[ \Gamma\_\mathtt{in} \vdash e\_\mathtt{in}\Rightarrow t\_\mathtt{out} \;\;\text{(infer)}\quad\quad \Gamma\_\mathtt{in} \vdash e\_\mathtt{in}\Leftarrow t\_\mathtt{in} \;\;\text{(check)}\\]
+
 ---
-# A Mathematical Approach
+# Bidirectional Typing, Intuitively
+
+- Separating type **checking** and **inference**. If we already know $t$, **check** $e$ against $t$. Otherwise **infer** $t$ from $e$.
+
+    ```haskell
+    val check : context * expr *  type -> unit
+    val infer : context * expr -> type
+    ```
+
+- $x$: Simple, look up the type of $x$ in `cxt`
+
+- If an expression $e$ can be inferred to have type $t$, then it can be checked
+    against $t$. That is,
+
+    ```haskell
+    function check(cxt, e, t):
+      let t' = infer(cxt, e)
+      if t &ne; t':
+        error
+    ```
 ---
-# Polymorphism: Generics the Easy Way
+# Bidirectional Typing, Intuitively
+
+- The case $e_1\, e_2$
+    1. $e_1:\alpha\to\beta$
+    1. $e_2:\alpha$
+    1. $e_1\,e_2:\beta$
+
+- There's no way to know $\alpha$, regardless whether $\beta$ is known or not.
+- Must **infer** the type of $e_1$. Then $e_2$ can be check to have type $\alpha$.
+    Luckily, most cases the funtion $e_1$ are known from the context.
+
+    ```haskell
+    function infer(cxt, AP (e1, e2)):
+      -- Failed if e1 is not of function type
+      let TARR (t1, t2) = infer(cxt, e1)
+      check(cxt, e2, t1)
+      return t2
+    ```
+---
+# Bidirectional Typing, Intuitively
+
+- The case $\lambda x.e$
+    1. $x : \alpha$
+    1. $e : \beta$
+    1. $(\lambda x.e) : \alpha\to\beta$
+
+- To check is .delete[human]simple.
+
+    ```haskell
+    function check(cxt, LAM (x, e), TARR (t, t')):
+      check((x,t) :: cxt,  e,  t')
+    ```
+
+- To infer, .delete[divine] $x$ needs annotaiton.
+
+    ```haskell
+    function infer(cxt, ALAM (x, t, e)):
+      return (TARR (t, infer ((x,t) :: cxt,  e)))
+    ```
+---
+# Bidirectional Typing, Intuitively
+
+- Even better: we allow the user annotate expressions with types
+
+- An expression $\`\`e:t"$ can be **inferred** to have type $t$
+  while we check $e$ against $t$.
+
+    ```haskell
+    function infer(cxt, ANNO (e, t)):
+      check(cxt, e, t)
+      return t
+    ```
+
+- Examples
+
+    ```haskell
+    (\x. \f. f x) : (A &rightarrow; (A &rightarrow; B) &rightarrow; B)
+
+    \(z : A). let ididid = \(h : (A &rightarrow; A) &rightarrow; A &rightarrow; A). h in
+
+              ididid (\f.f) (\x.x) z
+    ```
+---
+# An Equational Approach
+---
+# Polymorphism: Generic the Easy Way
 ---
 # Upgrading our Algorithm
+---
+# References
+1. Frank Pfenning. CMU CS15-312 *Foundations of Programming Languages*
+    http://www.cs.cmu.edu/~fp/courses/15312-f04/index.html
+
+1. D. Christiansen. *Bidirectional Typing Rules: A Tutorial*
+    http://www.itu.dk/people/drc/tutorials/bidirectional.pdf
+
 ---
 # Language Syntax Quick Guide
 
