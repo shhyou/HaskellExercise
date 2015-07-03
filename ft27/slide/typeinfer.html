@@ -1330,15 +1330,50 @@ $\;\;$.redbbox[$\mathit{id}\,[(t_2\to t_2)\to t_2\to t_2]\,\mathit{id}\,[t_2\to 
 
     * Quantify: calculate free variables `a`s of `t1` which are unbound in `cxt`, i.e. $\overline{a}:\equiv\mathit{FV}(t\_1)\setminus\left(\bigcup\_{t\in\mathtt{cxt}}\mathit{FV}(t)\right)$.
 ---
+# Remarks
+* Bidirectional often allows an algorithm to be read off from the typing rules.
+    It is also comparatively easy to adapt bidirectional approach to
+    more sophisticated typing systems like `RankNTypes` [4] and dependently
+    typed languages [5] where full type inference can be undecidable.
+
+* There are still much work to do when turning a type system into a bidirectional
+    system. For example, our type system may have **subtyping** like
+    $\forall a\, b. a\to b\to a \prec \forall c. c\to c\to c$.
+    The user could have annotated less general type than expected.
+---
+# Remarks
+* Type checking System F (The one with $\Lambda a.e$, $e\,[t]$) might involve
+    checking equivalence between types. For example, should the following
+    term be accepted?
+
+    \\[ (\lambda (f\colon \forall \alpha. \alpha\\!\to\\!\alpha).\, f)\, (\Lambda \beta. \lambda (x\colon \beta).\, x) \\]
+
+    But the issue comes back when we have type constructors anyway.
+
+* Algorithm W (Type inference algorithm for HM System) is kind of global algorithm
+    whereas bidirectional approach propagates type information locally.
+
+* We can extend HM system with data types. This naturally leads to
+    a kind system on types that classifies type constructors.
+---
 # References
-1. Frank Pfenning. CMU CS15-312 *Foundations of Programming Languages*
-    http://www.cs.cmu.edu/~fp/courses/15312-f04/index.html
+1. .small[Frank Pfenning. CMU CS15-312 *Foundations of Programming Languages*
+    http://www.cs.cmu.edu/~fp/courses/15312-f04/index.html]
 
-1. D. Christiansen. *Bidirectional Typing Rules: A Tutorial*
-    http://www.itu.dk/people/drc/tutorials/bidirectional.pdf
+1. .small[D. Christiansen. *Bidirectional Typing Rules: A Tutorial*
+    http://www.itu.dk/people/drc/tutorials/bidirectional.pdf]
 
-1. Oleg Kiselyov. *How OCaml type checker works .small[-- or what polymorphism and garbage collection have in common]*
-    http://okmij.org/ftp/ML/generalization.html
+1. .small[Oleg Kiselyov. *How OCaml type checker works -- or what polymorphism and garbage collection have in common*.
+    http://okmij.org/ftp/ML/generalization.html]
+
+1. .small[Simon Peyton Jones, Dimitrios Vytiniotis,
+    Stephanie Weirich, and Mark Shields.
+    *Practical type inference for arbitrary-rank types*.
+    http://research.microsoft.com/en-us/um/people/simonpj/papers/higher-rank/]
+
+1. .small[Andres Löh, Conor McBride and Wouter Swierstra.
+    *A Tutorial Implementation of a Dependently Typed Lambda Calculus*.
+    http://www.andres-loeh.de/LambdaPi/]
 
 ---
 # Language Syntax Quick Guide
