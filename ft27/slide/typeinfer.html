@@ -19,6 +19,13 @@ class: title, inverse, center, middle
 - The accompanying code does not correspond exactly to the (pseudo-) code in
     this slide. The `Infer` module in the accompanying code actually transforms
     its input, `LC` terms, into `STLC` terms or `SysF` terms.
+
+- Outline
+
+    * Language Syntax and Notations
+    * Bidirectional Typing
+    * Type Inference for Simply-Typed $\lambda$-Calculus
+    * Hindley-Milner Type System
 ---
 # Language Syntax (Incomplete)
 
@@ -445,6 +452,96 @@ $\displaystyle \frac{(x:t)\in \Gamma}{\Gamma \vdash x:t} \quad \quad \frac{\Gamm
     * Let $e_1 : t$ and $e_2:t'$
 
     * $t=t'\to t''$ for some unknown $t''$
+---
+# An Equational Approach
+
+\\[
+\vdash \lambda f.\lambda z.f\,z\,z:\\\_
+\\]
+---
+# An Equational Approach
+
+\\[
+\dfrac
+{f\colon t\_1\vdash \lambda z.f\,z\,z:\\\_}
+{\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+\\]
+
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_1,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{\Gamma\vdash f\,z\,z:\\\_}
+{
+  \dfrac
+  {f\colon t\_1\vdash \lambda z.f\,z\,z:\\\_}
+  {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+}
+\\]
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_1,\; z\colon t\_2$.
+
+\\[
+\dfrac{\Gamma\vdash f\,z:\\\_}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:\\\_}
+  {
+    \dfrac
+    {f\colon t\_1\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_1,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_1}
+  {\Gamma\vdash f\,z:\\\_}
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:\\\_}
+  {
+    \dfrac
+    {f\colon t\_1\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_1,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_1 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:\\\_}
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:\\\_}
+  {
+    \dfrac
+    {f\colon t\_1\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
 ---
 # An Equational Approach
 
