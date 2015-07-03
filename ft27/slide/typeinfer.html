@@ -150,7 +150,7 @@ t2(*)(t1)        (roughly)
     * $e_1\, e_2 : \beta$ in `cxt`
 
 - The definition is a sort of relation and it holds iff the $\`\`$shape$"$ is correct.
-    * $e_1\, e_2$ with $e_1 : \mathbf{char} \to \mathbf{int}$, $e_2 : \mathbf{char}$: OK
+    * $e_1\, e_2:\mathbf{int}$ with $e_1 : \mathbf{char} \to \mathbf{int}$, $e_2 : \mathbf{char}$: OK
     * $e_1\, e_2$ with $e_1 : \mathbf{bool} \to \mathbf{string}$, $e_2 : \mathbf{int}$: NO
     * $e_1\, e_2$ with $e_1 : \mathbf{int}$: NO
 ---
@@ -291,10 +291,10 @@ $\displaystyle \frac{(x:t)\in \Gamma}{\Gamma \vdash x:t} \quad \quad \frac{\Gamm
 ---
 # Bidirectional Typing, Intuitively
 
-- The case $\lambda x.e$
+- The case $\lambda x.e$, $\lambda (x\colon t).e$
     1. $x : \alpha$
     1. $e : \beta$
-    1. $(\lambda x.e) : \alpha\to\beta$
+    1. $(\lambda x.e) : \alpha\to\beta$, $(\lambda (x\colon \alpha).e) : \alpha\to\beta$
 
 - To check is .delete[human]simple.
 
@@ -402,7 +402,7 @@ Now $f:t_1 \quad\quad z:t_2$
     * $e_2:\alpha$
     * $e_1\,e_2:\beta$
 
-- Context: $[(f\colon t_1),(z\colon t_3)]$
+- Context: $[(f\colon t_1),(z\colon t_2)]$
 ]
 
 Now $f:t_1 \quad\quad z:t_2$
@@ -422,7 +422,7 @@ Now $f:t_1 \quad\quad z:t_2$
     * $e_2:\alpha$
     * $e_1\,e_2:\beta$
 
-- Context: $[(f\colon t_1),(z\colon t_3)]$
+- Context: $[(f\colon t_1),(z\colon t_2)]$
 ]
 
 Now $f:t_1 \quad\quad z:t_2$
@@ -437,12 +437,15 @@ Now $f:t_1 \quad\quad z:t_2$
 ]
 
 .pull-right[
-- Case $e_1\,e_2$ with $e_1 :\equiv f$,$e_2:\equiv z$
-    * $e_1:\alpha\to\beta$
-    * $e_2:\alpha$
-    * $e_1\,e_2:\beta$
+- Case $x$ with $x :\equiv f$
+    <br>
 
-- Context: $[(f\colon t_1),(z\colon t_3)]$
+    * $x:\alpha$
+    * $(x\colon \alpha)\in\mathtt{cxt}$
+
+<br>
+
+- Context: $[(f\colon t_1),(z\colon t_2)]$
 ]
 
 Now $f:t_1 \quad\quad z:t_2$
@@ -457,12 +460,15 @@ Now $f:t_1 \quad\quad z:t_2$
 ]
 
 .pull-right[
-- Case $e_1\,e_2$ with $e_1 :\equiv f$,$e_2:\equiv z$
-    * $e_1:\alpha\to\beta$
-    * $e_2:\alpha$
-    * $e_1\,e_2:\beta$
+- Case $x$ with $x :\equiv z$
+    <br>
 
-- Context: $[(f\colon t_1),(z\colon t_3)]$
+    * $x:\alpha$
+    * $(x\colon \alpha)\in\mathtt{cxt}$
+
+<br>
+
+- Context: $[(f\colon t_1),(z\colon t_2)]$
 ]
 
 Now $f:t_1 \quad\quad z:t_2$
@@ -483,7 +489,7 @@ $t_1=t_2\to t_3$
     * $e_2:\alpha$
     * $e_1\,e_2:\beta$
 
-- Context: $[(f\colon t_1),(z\colon t_3)]$
+- Context: $[(f\colon t_1),(z\colon t_2)]$
 ]
 
 Now $f:t_1 \quad\quad z:t_2$
@@ -499,12 +505,15 @@ $t_1=t_2\to t_3$
 ]
 
 .pull-right[
-- Case $e_1\,e_2$ with $e_1 :\equiv fz$,$e_2:\equiv z$
-    * $e_1:\alpha\to\beta$
-    * $e_2:\alpha$
-    * $e_1\,e_2:\beta$
+- Case $x$ with $x :\equiv z$
+    <br>
 
-- Context: $[(f\colon t_1),(z\colon t_3)]$
+    * $x:\alpha$
+    * $(x\colon \alpha)\in\mathtt{cxt}$
+
+<br>
+
+- Context: $[(f\colon t_1),(z\colon t_2)]$
 ]
 
 Now $f:t_1 \quad\quad z:t_2$
@@ -526,7 +535,7 @@ $t_3=t_2\to t_4$
     * $e_2:\alpha$
     * $e_1\,e_2:\beta$
 
-- Context: $[(f\colon t_1),(z\colon t_3)]$
+- Context: $[(f\colon t_1),(z\colon t_2)]$
 ]
 
 Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3$
@@ -578,7 +587,7 @@ Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3 \quad\quad fzz:t_4 \quad\quad (\la
 # Solving Equations
 - At top level: $(\lambda f.\lambda z. f z z):t_1\to t_2\to t_4$
 
-- Now $(f:t_1), (z:t_2), (fz:t_3), (fzz:t_4)$ and $(\lambda z.fzz):t_2\to t_4$ with
+- $(f:t_1)$, $(z:t_2)$, $(fz:t_3)$, $(fzz:t_4)$, $(\lambda z.fzz):t_2\to t_4$
 
     $t_1=t_2\to t_3$<br>
     $t_3=t_2\to t_4$
@@ -586,7 +595,7 @@ Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3 \quad\quad fzz:t_4 \quad\quad (\la
 # Solving Equations
 - At top level: $(\lambda f.\lambda z. f z z):(t_2\to t_3)\to t_2\to t_4$
 
-- Now $(f:t_2\to t_3), (z:t_2), (fz:t_3), (fzz:t_4)$ and $(\lambda z.fzz):t_2\to t_4$ with
+- $(f:t_2\to t_3)$, $(z:t_2)$, $(fz:t_3)$, $(fzz:t_4)$, $(\lambda z.fzz):t_2\to t_4$
 
     $t_1=t_2\to t_3$<br>
     $t_3=t_2\to t_4$
@@ -596,16 +605,30 @@ Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3 \quad\quad fzz:t_4 \quad\quad (\la
 # Solving Equations
 - At top level: $(\lambda f.\lambda z. f z z):(t_2\to t_2\to t_4)\to t_2\to t_4$
 
-- Now $(f:t_2\to t_2\to t_4), (z:t_2), (fz:t_2\to t_4), (fzz:t_4)$ and $(\lambda z.fzz):t_2\to t_4$ with
+- $(f:t_2\to t_2\to t_4)$, $(z:t_2)$, $(fz:t_2\to t_4)$, $(fzz:t_4)$, $(\lambda z.fzz):t_2\to t_4$
 
     $t_1=t_2\to t_3$<br>
     $t_3=t_2\to t_4$
 
 - Substitute $t_2\to t_4$ for $t_3$!
 
---
+---
+# Solving Equations
+- At top level: $(\lambda f.\lambda z. f z z):(t_2\to t_2\to t_4)\to t_2\to t_4$
+
+- $(f:t_2\to t_2\to t_4)$, $(z:t_2)$, $(fz:t_2\to t_4)$, $(fzz:t_4)$, $(\lambda z.fzz):t_2\to t_4$
+
+    $t_1=t_2\to t_3$<br>
+    $t_3=t_2\to t_4$
+
+- No more $t_1$ and $t_3$. Done!
 
 .center[.greenbbox[$(\lambda f.\lambda z. f z z):(A\to A\to B)\to A\to B$]]
+
+- There might be equations of form $T_1\to T_2=T_3\to T_4$. We can simply
+  solve $T_1=T_3$ and $T_2=T_4$ recursively, arriving at equations of form
+  $t_i = T_j$.
+
 ---
 # Disjoint Sets to the Rescue
 
@@ -620,26 +643,25 @@ Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3 \quad\quad fzz:t_4 \quad\quad (\la
                 | LINK of typ
     ```
 
-    * A `'a ref` is a mutable variable of type `'a`
+    * Disjoint set (`metavar ref`) is integraed into
+      (meta-) types `typ`
 
-- Example
+- A `'a ref` is a mutable variable of type `'a`
 
     ```haskell
     let tvar = ref (UNBOUND "x")
     let t = TARR (TVAR tvar, TVAR var)
-    print t
-    --  => x -> x
+    print t     --  => x -> x
 
     let t' = TVAR (ref (UNBOUND "A"))
     tvar := BOUND (TARR (t', t'))
-    print t
-    --  => (t -> t) -> t -> t
+    print t     --  => (t -> t) -> t -> t
     ```
 ---
 # Unification: Solve an Equation
 - $t\_i = T$ (or $= (\\\_ \to \\\_), ...$) &Rightarrow; substitute RHS for $t\_i$ (*)
 
-- $t_1\to t_2=t_3\to t_4$ &Rightarrow; Solve $t_1=t_3$, $t_2=t_4$ recursively.
+- $T_1\to T_2=T_3\to T_4$ &Rightarrow; Solve $T_1=T_3$, $T_2=T_4$ recursively.
 
 ```haskell
 function unify(TVAR (r = LINK t), t'):   -- &leftarrow; Find
@@ -651,7 +673,7 @@ function unify(TVAR (r = UNBOUND x), TVAR (s = UNBOUND y)), x == y:
 function unify(TVAR (r = UNBOUND x), t): -- &leftarrow; Union
   if occurs(x, t):  -- &leftarrow; See &diamond;&diamond;page
     ERROR!!
-  r := t
+  r := LINK t
 
 function unify(TARR (t1, t2), TARR (t3, t4)):
   unify(t1, t3)
@@ -684,7 +706,7 @@ function unify(TARR (t1, t2), TARR (t3, t4)):
       return (TARR (t, typeinfer((x,t) :: cxt,  e)))
     ```
 ---
-# Occurs Check
+# (*) Occurs Check
 - Infer $\lambda x.xx$: Get equation $x:t_1$, $xx:t_2$ and $t_1=t_1\to t_2$
 
     * Cannot eliminate $t_1$ by substituting $t_1\to t_2$ for $t_1$!
@@ -717,6 +739,38 @@ function unify(TARR (t1, t2), TARR (t3, t4)):
 ]
 
 - In equation $t_i = T$, it's an error if $t_i$ occurs in $T$.
+---
+# Pseudo(?) Code...
+
+- The accompanying code further handles exception and translate
+  LC terms into STLC terms.
+
+```haskell
+type typ = TVAR of metavar ref | TARR of typ * typ
+and metavar = UNLINK of string | LINK of typ
+
+let rec unify = function
+    TVAR {contents = LINK t}, t' |
+    t', TVAR {contents = LINK t} ->
+      unify (t, t')
+  | TVAR ({contents = UNLINK x}), TVAR ({contents = UNLINK x'})
+      when x = x' -> ()
+  | TVAR ({contents = UNLINK x} as r), t |
+    t, TVAR ({contents = UNLINK x} as r) ->
+      if occurs (x, t) then raise Occurs_check else r := LINK t
+  | TARR (t1, t2), TARR (t1', t2') ->
+      (unify (t1, t1'); unify (t2, t2')
+
+let rec infer = function
+    cxt, VAR x -> List.assoc x cxt
+  | cxt, LAM (x, e) ->
+      let t = fresh_var () in
+      TARR (t, infer ((x, t)::cxt, e))
+  | cxt, AP (e1, e2) ->
+      let t = fresh_var () in
+      (unify (infer (cxt, e1), TARR (infer (cxt, e2), t));
+       t)
+```
 ---
 # Polymorphism: Generic the Easy Way
 - C++ Style:
@@ -821,10 +875,28 @@ t2(*)(t1)        (roughly)
     }
     ```
 ---
+# Examples
+
+$\Lambda T.\Lambda S.$<br>
+$\;\;\;\;\underline{(\Lambda\alpha.\Lambda\beta.\lambda(f\colon \alpha\to\beta).\lambda(z\colon \alpha).f\,z)\; [T]}\; [S\to S]\; (\lambda (x\colon T).\lambda(y\colon S).y)$
+
+$\leadsto\Lambda T.\Lambda S.$<br>
+$\;\;\;\;\underline{(\Lambda\beta.\lambda(f\colon}$ .redbbox[$T$]$\underline{\\!\to\\!\beta).\lambda(z\colon}$.redbbox[$T$]$\underline{).f\,z)\; [S\\!\to\\!S]}\; (\lambda (x\colon T).\lambda(y\colon S).y)$
+
+$\leadsto\Lambda T.\Lambda S.$<br>
+$\;\;\;\;\underline{(\lambda(f\colon T\to}$.redbbox[$S$]$\underline{\to}$.redbbox[$S$]$\underline{).\lambda(z\colon T).f\,z) (\lambda (x\colon T).\lambda(y\colon S).y)}$
+
+$\leadsto\Lambda T.\Lambda S.$<br>
+$\;\;\;\;\lambda(z\colon T) $.redbbox[$\underline{(\lambda (x\colon T).\lambda(y\colon S).y)}$]$\underline{z}$
+
+$\leadsto\Lambda T.\Lambda S.$<br>
+$\;\;\;\;\lambda(z\colon T) \lambda(y\colon S).y$
+
+---
 # Damas-Hindley-Milner System
 - Generalize at `let`. $\forall$-quantifiers are only allowed at $\`\`$top$"$ level
 
-    * $\forall a.\forall b. a\to b\to b$ : OK
+    * $\forall a.\forall b. a\to b\to b$ \colon  OK
     * $\forall a.\forall b. b\to (a\to b)\to b$ : OK
     * $(\forall a. a\to a)\to\mathtt{Int}$ : Not OK
 
@@ -890,6 +962,9 @@ $\mathbf{let}\; \mathit{id} = \Lambda t_1.\lambda (x\colon t_1).x\; \mathbf{in}$
 
 1. D. Christiansen. *Bidirectional Typing Rules: A Tutorial*
     http://www.itu.dk/people/drc/tutorials/bidirectional.pdf
+
+1. Oleg Kiselyov. *How OCaml type checker works .small[-- or what polymorphism and garbage collection have in common]*
+    http://okmij.org/ftp/ML/generalization.html
 
 ---
 # Language Syntax Quick Guide
