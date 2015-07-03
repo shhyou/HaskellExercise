@@ -11,6 +11,15 @@ class: title, inverse, center, middle
 
 .center[.large[suhorng]]
 ---
+# Before We Start
+
+- You may safely skip any judgments and inference rules in this slide (things)
+    like $\Gamma\vdash e:t$, $\dfrac{(x\colon t)\in \Gamma}{\Gamma \vdash x\colon t}$
+
+- The accompanying code does not correspond exactly to the (pseudo-) code in
+    this slide. The `Infer` module in the accompanying code actually transforms
+    its input, `LC` terms, into `STLC` terms or `SysF` terms.
+---
 # Language Syntax (Incomplete)
 
 <table style="padding: 1px; margin: 1px;">
@@ -231,8 +240,8 @@ let rec infer = function
 ---
 # Improvement via Bidirectional Typing
 
-- Another motivation: Originally, the typing rules are relations and might not be
-    syntax-directed
+- Another motivation: We wish to turn judgments into functions, and make typing
+    rules syntax-directed.
 
 $\displaystyle \frac{(x:t)\in \Gamma}{\Gamma \vdash x:t} \quad \quad \frac{\Gamma,(x\colon t)\vdash e:t'}{\Gamma \vdash (\lambda x.e):t\to t'} \quad\quad \frac{\Gamma \vdash e_1:t\to t' \quad \Gamma \vdash e_2:t}{\Gamma \vdash e_1\,e_2:t'}$
 
@@ -240,9 +249,10 @@ $\displaystyle \frac{(x:t)\in \Gamma}{\Gamma \vdash x:t} \quad \quad \frac{\Gamm
 
 - Annotate judgments with I/O modes to get a function
 
-\\[ \Gamma\_\mathtt{in} \vdash x\_\mathtt{in}:t\_\mathtt{out}\\]
+    * $\Gamma\_\mathtt{in} \vdash x\_\mathtt{in}:t\_\mathtt{out}$ : Use following
+      principles to examine and rewrite typing rules accordingly.
 
-\\[ \text{recursive call} \Uparrow\;\; \frac{(\Gamma,x\colon t)\_\mathtt{shown\\\_in}\vdash e:t'\_\mathtt{assumed\\\_out}}{\Gamma\_\mathtt{assumed\\\_in} \vdash (\lambda x.e):(t\to t')\_\mathtt{shown\\\_out}} \;\; \Downarrow \text{return} \\]
+\\[ \text{recursion} \Uparrow\;\; \frac{(\Gamma,x\colon t)\_\mathtt{shown\\\_in}\vdash e\_\mathtt{shown\\\_in}:t'\_\mathtt{assumed\\\_out,free}}{\Gamma\_\mathtt{assumed\\\_in} \vdash (\lambda (x\colon t).e)\_\mathtt{assumed\\\_in}:(t\to t')\_\mathtt{shown\\\_out}} \;\; \Downarrow \text{return} \\]
 
 - Separating type **checking** and **inference**:
 
@@ -269,6 +279,8 @@ $\displaystyle \frac{(x:t)\in \Gamma}{\Gamma \vdash x:t} \quad \quad \frac{\Gamm
       if t &ne; t':
         error
     ```
+
+.footnote[$\dagger$See appendix for typing rules.]
 ---
 # Bidirectional Typing, Intuitively
 
@@ -332,6 +344,93 @@ $\displaystyle \frac{(x:t)\in \Gamma}{\Gamma \vdash x:t} \quad \quad \frac{\Gamm
 
               ididid (\f.f) (\x.x) z
     ```
+---
+# An Bidirectional Typing Example
+\\[
+\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow
+\\]
+---
+# An Bidirectional Typing Example
+\\[
+\dfrac
+{
+  \vdash \lambda(x\colon a\\!\to\\!a).x \Rightarrow
+  \quad\quad
+  \vdash \lambda y.y \Leftarrow
+}
+{\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow}
+\\]
+---
+# An Bidirectional Typing Example
+\\[
+\dfrac
+{
+  \dfrac
+  {x\colon a\\!\to\\!a \vdash x \Rightarrow}
+  {\vdash \lambda(x\colon a\\!\to\\!a).x \Rightarrow}
+  \quad\quad
+  \vdash \lambda y.y \Leftarrow
+}
+{\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow}
+\\]
+---
+# An Bidirectional Typing Example
+\\[
+\dfrac
+{
+  \dfrac
+  {\dfrac{}{x\colon a\\!\to\\!a \vdash x \Rightarrow  a\\!\to\\!a}}
+  {\vdash \lambda(x\colon a\\!\to\\!a).x \Rightarrow}
+  \quad\quad
+  \vdash \lambda y.y \Leftarrow
+}
+{\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow}
+\\]
+---
+# An Bidirectional Typing Example
+\\[
+\dfrac
+{
+  \dfrac
+  {\dfrac{}{x\colon a\\!\to\\!a \vdash x \Rightarrow  a\\!\to\\!a}}
+  {\vdash \lambda(x\colon a\\!\to\\!a).x \Rightarrow  (a\\!\to\\!a)\\!\to\\!a\\!\to\\!a}
+  \quad\quad
+  \vdash \lambda y.y \Leftarrow a\\!\to\\!a
+}
+{\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow a\\!\to\\!a}
+\\]
+---
+# An Bidirectional Typing Example
+\\[
+\dfrac
+{
+  \dfrac
+  {\dfrac{}{x\colon a\\!\to\\!a \vdash x \Rightarrow  a\\!\to\\!a}}
+  {\vdash \lambda(x\colon a\\!\to\\!a).x \Rightarrow  (a\\!\to\\!a)\\!\to\\!a\\!\to\\!a}
+  \quad\quad
+  \dfrac
+  {y\colon a\vdash y \Leftarrow a}
+  {\vdash \lambda y.y \Leftarrow a\\!\to\\!a}
+}
+{\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow a\\!\to\\!a}
+\\]
+---
+# An Bidirectional Typing Example
+\\[
+\dfrac
+{
+  \dfrac
+  {\dfrac{}{x\colon a\\!\to\\!a \vdash x \Rightarrow  a\\!\to\\!a}}
+  {\vdash \lambda(x\colon a\\!\to\\!a).x \Rightarrow  (a\\!\to\\!a)\\!\to\\!a\\!\to\\!a}
+  \quad\quad
+  \dfrac
+  {\dfrac
+    {\dfrac{}{y\colon a\vdash y \Rightarrow a}}
+    {y\colon a\vdash y \Leftarrow a}}
+  {\vdash \lambda y.y \Leftarrow a\\!\to\\!a}
+}
+{\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow a\\!\to\\!a}
+\\]
 ---
 # An Equational Approach
 - The case $e_1\, e_2$
@@ -639,7 +738,7 @@ Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3 \quad\quad fzz:t_4 \quad\quad (\la
     ```haskell
     type typ = TVAR of (metavar ref)
              | TARR of typ * typ
-    and metavar = UNBOUND of string
+    and metavar = UNLINK of string
                 | LINK of typ
     ```
 
@@ -649,11 +748,11 @@ Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3 \quad\quad fzz:t_4 \quad\quad (\la
 - A `'a ref` is a mutable variable of type `'a`
 
     ```haskell
-    let tvar = ref (UNBOUND "x")
+    let tvar = ref (UNLINK "x")
     let t = TARR (TVAR tvar, TVAR var)
     print t     --  => x -> x
 
-    let t' = TVAR (ref (UNBOUND "A"))
+    let t' = TVAR (ref (UNLINK "A"))
     tvar := BOUND (TARR (t', t'))
     print t     --  => (t -> t) -> t -> t
     ```
@@ -667,10 +766,10 @@ Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3 \quad\quad fzz:t_4 \quad\quad (\la
 function unify(TVAR (r = LINK t), t'):   -- &leftarrow; Find
   unify(t, t')
 
-function unify(TVAR (r = UNBOUND x), TVAR (s = UNBOUND y)), x == y:
+function unify(TVAR (r = UNLINK x), TVAR (s = UNLINK y)), x == y:
   no-op
 
-function unify(TVAR (r = UNBOUND x), t): -- &leftarrow; Union
+function unify(TVAR (r = UNLINK x), t): -- &leftarrow; Union
   if occurs(x, t):  -- &leftarrow; See &diamond;&diamond;page
     ERROR!!
   r := LINK t
@@ -896,7 +995,7 @@ $\;\;\;\;\lambda(z\colon T) \lambda(y\colon S).y$
 # Damas-Hindley-Milner System
 - Generalize at `let`. $\forall$-quantifiers are only allowed at $\`\`$top$"$ level
 
-    * $\forall a.\forall b. a\to b\to b$ \colon  OK
+    * $\forall a.\forall b. a\to b\to b$ :  OK
     * $\forall a.\forall b. b\to (a\to b)\to b$ : OK
     * $(\forall a. a\to a)\to\mathtt{Int}$ : Not OK
 
@@ -912,22 +1011,27 @@ $\;\;\;\;\lambda(z\colon T) \lambda(y\colon S).y$
     $\mathit{id}\; \mathit{id}\;\mathit{id}$
 ---
 # Damas-Hindley-Milner System
-$\mathbf{let}\; \mathit{id} = $ .redbbox[$\lambda x.x$] $\mathbf{in}$<br>
-$\mathit{id}\; \mathit{id}\;\mathit{id}$
+$\lambda u.$<br>
+$\;(\mathbf{let}\; \mathit{id} = $ .redbbox[$\lambda x.x$] $\mathbf{in}$<br>
+$\;\;\mathit{id}\; \mathit{id}\;\mathit{id})$
 
 - Inferred to be $t_1\to t_1$ by the preceding algorithm.<br>
-- $t_1$ is free: `UNBOUND "t1"`.
+- $t_1$ is free: `UNLINK "t1"` and is not bound in `cxt`
+    * Assume that $u:t_3$.
+    * `cxt`-bound type variables like `UNLINK "t3"` in $\lambda (u:t_3).\; ...$ should not be generalized
 ---
 # Damas-Hindley-Milner System
-$\mathbf{let}$ .redbbox[$\mathit{id}$] $= \lambda x.x\; \mathbf{in}$<br>
-$\mathit{id}\; \mathit{id}\;\mathit{id}$
+$\lambda u.$<br>
+$\;(\mathbf{let}$ .redbbox[$\mathit{id}$] $= \lambda x.x\; \mathbf{in}$<br>
+$\;\;\mathit{id}\; \mathit{id}\;\mathit{id})$
 
 - Generalize unbound free variables ($t_1$ in this case)
 - $\mathit{id} : \forall t_1.\,t_1\to t_1$
 ---
 # Damas-Hindley-Milner System
-$\mathbf{let}\; \mathit{id} = \Lambda t_1.\lambda (x\colon t_1).x\; \mathbf{in}$<br>
-.redbbox[$\mathit{id}\,[(t_2\to t_2)\to t_2\to t_2]\,\mathit{id}\,[t_2\to t_2]\,\mathit{id}\,[t_2]$]
+$\lambda u.$<br>
+$\;(\mathbf{let}\; \mathit{id} = \Lambda t_1.\lambda (x\colon t_1).x\; \mathbf{in}$<br>
+$\;\;$.redbbox[$\mathit{id}\,[(t_2\to t_2)\to t_2\to t_2]\,\mathit{id}\,[t_2\to t_2]\,\mathit{id}\,[t_2]$]$)$
 
 - Being explicit...
 
@@ -945,7 +1049,7 @@ $\mathbf{let}\; \mathit{id} = \Lambda t_1.\lambda (x\colon t_1).x\; \mathbf{in}$
       ```
 
     * Instantiate: $\forall a. \forall b. a \to (a \to b) \to b$ becomes
-        $t_i\to (t_i\to t_j)\to t_j$ for fresh variable $t_i$,$t_j$
+        $t_i\to (t_i\to t_j)\to t_j$ for **fresh** type variables $t_i$,$t_j$
 
 - Case $\mathbf{let}$
     ```haskell
@@ -954,7 +1058,7 @@ $\mathbf{let}\; \mathit{id} = \Lambda t_1.\lambda (x\colon t_1).x\; \mathbf{in}$
       return typeinfer((x,&forall;a.t1) :: cxt,  e2)
     ```
 
-    * Quantify: calculate free variables `a` in `t1`.
+    * Quantify: calculate free variables `a`s of `t1` which are unbound in `cxt`, i.e. $\overline{a}:\equiv\mathit{FV}(t\_1)\setminus\left(\bigcup\_{t\in\mathtt{cxt}}\mathit{FV}(t)\right)$.
 ---
 # References
 1. Frank Pfenning. CMU CS15-312 *Foundations of Programming Languages*
@@ -1042,6 +1146,22 @@ template&amp;lt;typename a&amp;gt; e
     </tr>
   </tbody>
 </table>
+---
+# Bidirectional Typing
+- $\Gamma\_\mathtt{in}\vdash e\_\mathtt{in}\Rightarrow t\_\mathtt{out}$ : $e$ can be inferred to have type $t$
+- $\Gamma\_\mathtt{in}\vdash e\_\mathtt{in}\Leftarrow t\_\mathtt{in}$ : $e$ can be checked against type $t$
+
+<br>
+
+\\[ \frac{(x\colon t)\in \Gamma}{\Gamma\vdash x\Rightarrow t} \quad\quad \frac{\Gamma,x \colon t\vdash e \Rightarrow t'}{\Gamma\vdash (\lambda(x\colon t).e)\Rightarrow t\to t'} \quad\quad \frac{\Gamma,x\colon t\vdash e\Leftarrow t'}{\Gamma\vdash (\lambda x.e)\Leftarrow t\to t'} \\]
+
+<br>
+
+\\[ \frac{\Gamma\vdash e_1\Rightarrow\alpha\to\beta \quad\quad \Gamma\vdash e_2\Leftarrow \alpha}{\Gamma \vdash e_1\,e_2 \Rightarrow \beta} \\]
+
+<br>
+
+\\[ \frac{\Gamma\vdash e\Leftarrow t}{\Gamma\vdash (e\colon t)\Rightarrow t} \quad\quad  \quad\quad \frac{\Gamma\vdash e\Rightarrow t' \quad\quad \Gamma \vdash t=t'}{\Gamma\vdash e\Leftarrow t} \\]
 </textarea>
     <script src="./remark-0.10.2.min.js" type="text/javascript"></script>
     <script type="text/javascript">
