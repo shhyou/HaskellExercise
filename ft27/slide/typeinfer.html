@@ -13,8 +13,8 @@ class: title, inverse, center, middle
 ---
 # Before We Start
 
-- You may safely skip any judgments and inference rules in this slide (things)
-    like $\Gamma\vdash e:t$, $\dfrac{(x\colon t)\in \Gamma}{\Gamma \vdash x\colon t}$
+- You may safely skip any judgments and inference rules in this slide (things
+    like $\Gamma\vdash e:t$, $\frac{(x\colon t)\in \Gamma}{\Gamma \vdash x\colon t}$ )
 
 - The accompanying code does not correspond exactly to the (pseudo-) code in
     this slide. The `Infer` module in the accompanying code actually transforms
@@ -173,14 +173,14 @@ t2(*)(t1)        (roughly)
 # Other rules
 - $x$ has type $t$ precisely when $(x\colon t)\in\mathtt{cxt}$<br>(Lookup
     the type of $x$ in the current context)
-- When $\lambda x.e$ occurs the context `cxt`, for some $\alpha,\beta$ ...
+- When $\lambda x.e$ occurs in the context `cxt`, then for some $\alpha,\beta$ ...
     * $x$ has type $\alpha$
 
     * $e$ has type $\beta$ in the context $\\{x\colon \alpha\\}\cup \mathtt{cxt}$
 
     ```cpp
     auto f(int x) -> bool { return x == 0; }
-
+    //                             ^ cxt={x:int}
     // 'x' has type 'int'
     // 'x == 0' has type 'bool'
     // 'f' (will) has type  'bool(*)(int)', or roughly 'int -> bool'
@@ -204,10 +204,10 @@ t2(*)(t1)        (roughly)
 ---
 # First Solution
 - Sticking to $\lambda (x\colon t).e$, i.e. users are require to *annotate* $\alpha$
-    * Variables are added to the context only in this case, and we
-      know their types now
+    * This is the only case where new variables will be added to the context,
+      and we know the variables' types now.
 
-    * $e$ can only refer to variables in current context
+    * $e$ can only refer to variables in the current context
 
     * Hence we can *infer* the type of $e$.
 
@@ -643,7 +643,7 @@ $t\_3=t\_2\to t\_4$
 ---
 # An Equational Approach
 
-- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+- Write $\Gamma :\equiv f\colon t\_2\to t\_2\to t\_4,\; z\colon t\_2$.
 
 \\[
 \dfrac
@@ -669,7 +669,7 @@ $t\_3=t\_2\to t\_4$
 ---
 # An Equational Approach
 
-- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+- Write $\Gamma :\equiv f\colon t\_2\to t\_2\to t\_4,\; z\colon t\_2$.
 
 \\[
 \dfrac
@@ -693,7 +693,7 @@ $t\_3=t\_2\to t\_4$
 ---
 # An Equational Approach
 
-- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+- Write $\Gamma :\equiv f\colon t\_2\to t\_2\to t\_4,\; z\colon t\_2$.
 
 \\[
 \dfrac
