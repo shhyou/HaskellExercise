@@ -545,6 +545,179 @@ $\displaystyle \frac{(x:t)\in \Gamma}{\Gamma \vdash x:t} \quad \quad \frac{\Gamm
 ---
 # An Equational Approach
 
+- Write $\Gamma :\equiv f\colon t\_1,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_1 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_3}
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:\\\_}
+  {
+    \dfrac
+    {f\colon t\_1\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+
+$t\_1=t\_2\to t\_3$
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_2\to t\_3 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_3}
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:\\\_}
+  {
+    \dfrac
+    {f\colon t\_2\to t\_3\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+
+$t\_1=t\_2\to t\_3$
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_2\to t\_3 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_3}
+  \quad\quad
+  \Gamma\vdash z:t\_2
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:\\\_}
+  {
+    \dfrac
+    {f\colon t\_2\to t\_3\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_2\to t\_3 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_3}
+  \quad\quad
+  \Gamma\vdash z:t\_2
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:t\_4}
+  {
+    \dfrac
+    {f\colon t\_2\to t\_3\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+
+$t\_3=t\_2\to t\_4$
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_2\to t\_2\to t\_4 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_2\to t\_4}
+  \quad\quad
+  \Gamma\vdash z:t\_2
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:t\_4}
+  {
+    \dfrac
+    {f\colon t\_2\to t\_2\to t\_4\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+
+$t\_3=t\_2\to t\_4$
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_2\to t\_2\to t\_4 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_2\to t\_4}
+  \quad\quad
+  \Gamma\vdash z:t\_2
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:t\_4}
+  {
+    \dfrac
+    {f\colon t\_2\to t\_2\to t\_4\vdash \lambda z.f\,z\,z:t\_2\to t\_4}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_2\to t\_2\to t\_4 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_2\to t\_4}
+  \quad\quad
+  \Gamma\vdash z:t\_2
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:t\_4}
+  {
+    \dfrac
+    {f\colon t\_2\to t\_2\to t\_4\vdash \lambda z.f\,z\,z:t\_2\to t\_4}
+    {\vdash \lambda f.\lambda z.f\,z\,z:(t\_2\to t\_2\to t\_4)\to t\_2\to t\_4}
+  }
+}
+\\]
+
+---
+# An Equational Approach
+
 .center[.redbbox[$\lambda f.\lambda z. f z z$]]
 
 - Allocate fresh unknown $t_1$
