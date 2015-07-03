@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html class="remark-container"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+    <title>實作型別系統</title>
+    <link rel="stylesheet" href="./style2.css">
+    <script src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML&amp;delayStartupUntil=configured" type="text/javascript"></script>
+  </head>
+  <body class="remark-container">
+    <textarea id="source" style="display: none;">name: inverse
+class: title, inverse, center, middle
+# .green[Type Systems] in .lightblue[Practice]<br>
+
+.center[.large[suhorng]]
+---
+# Before We Start
+
+- You may safely skip any judgments and inference rules in this slide (things)
+    like $\Gamma\vdash e:t$, $\dfrac{(x\colon t)\in \Gamma}{\Gamma \vdash x\colon t}$
+
+- The accompanying code does not correspond exactly to the (pseudo-) code in
+    this slide. The `Infer` module in the accompanying code actually transforms
+    its input, `LC` terms, into `STLC` terms or `SysF` terms.
+
+- Outline
+
+    * Language Syntax and Notations
+    * Bidirectional Typing
+    * Type Inference for Simply-Typed $\lambda$-Calculus
+    * Hindley-Milner Type System
+---
+# Language Syntax (Incomplete)
+
+<table style="padding: 1px; margin: 1px;">
+  <thead>
+    <tr>
+      <th>
+        In Slide
+      </th>
+      <th>
+        In Code
+      </th>
+      <th>
+        Analogy
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>$x$</td>
+      <td><pre>VAR "x"</pre></td>
+      <td><pre><code class="hljs">x</code></pre></td>
+    </tr>
+    <tr>
+      <td>$\lambda x.e$<br>$\lambda (x\colon t).e$</td>
+      <td><pre>LAM ("x", e)
+LAM ("x", t, e)
+ALAM ("x", t, e)
+</pre></td>
+      <td>
+        <pre><code class="hljs">\x -> e
+function (x) { return e; }
+\(x :: t) -> e
+(x : t) => e
+[???](t x) { return e; }
+</code></pre>
+      </td>
+    </tr>
+    <tr>
+      <td>$e_1\;e_2$</td>
+      <td><pre>AP (e1, e2)</pre></td>
+      <td>
+        <pre><code class="hljs">e1 e2
+e1(e2)
+</code></pre>
+      </td>
+    </tr>
+    <tr>
+      <td>$\mathbf{let}\;x=e_1\;\mathbf{in}\;e_2$</td>
+      <td><pre>LET ("x", e1, e2)</pre></td>
+      <td><pre><code class="hljs">let x = e1 in e2
+val x = e1; e2
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>A</td>
+      <td><pre>TVAR "A"</pre></td>
+      <td><pre><code class="hljs">a, T (Haskell)
+typename A, T    (roughly)
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>$t_1 \to t_2$</td>
+      <td><pre>TARR (t1, t2)</pre></td>
+      <td><pre><code class="hljs">t1 -> t2
+function&amp;lt;t2(t1)&amp;gt;
+t2(*)(t1)        (roughly)
+</code></pre></td>
+    </tr>
+  </tbody>
+</table>
+---
+# Examples
+- Slide: $\lambda x.\lambda f. f\,x$
+
+- Code:
+
+    `LAM ("x", LAM ("f", AP (VAR "f", VAR "x")))`
+
+- Javascript
+  ```javascript
+    function (x) {
+      return function(f) { return f(x); }
+    }
+  ```
+
+- C++ (roughly):
+    ```cpp
+    [](auto x) {
+      return [=](auto f) {
+        return f(x);
+      }
+    }
+    ```
+
+---
+# What Are Contexts
+
+- Variables visible in current scope
+
+    ```javascript
+    function (x) {
+      //     ^ here: [x]
+      return function (y) { return x; }
+      //                    ^ here: [x, y]
+      //     ^ here: [x]
+    }
+    ```
+
+.center[
+<svg width="280" height="180" xmlns="http://www.w3.org/2000/svg">
+ <!-- Created with SVG-edit - http://svg-edit.googlecode.com/ -->
+ <g>
+  <title>Contexts</title>
+  <rect id="svg_6" height="103.999998" width="231.000007" y="54" x="36" stroke="#000000" fill="#ffffff"/>
+  <rect id="svg_1" height="50.000001" width="177.999999" y="76" x="79" stroke="#000000" fill="#ffffff"/>
+  <text xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="24" id="svg_2" y="110" x="167" stroke-width="0" stroke="#000000" fill="#000000">cxt={x,y}</text>
+  <text font-weight="bold" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="32" id="svg_3" y="94" x="80" stroke-linecap="null" stroke-linejoin="null" stroke-width="0" stroke="#000000" fill="#000000">λy</text>
+  <text id="svg_4" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="24" y="148" x="96" stroke-width="0" stroke="#000000" fill="#000000">cxt={x}</text>
+  <text id="svg_7" font-weight="bold" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="32" y="71.5" x="36" stroke-linecap="null" stroke-linejoin="null" stroke-width="0" stroke="#000000" fill="#000000">λx</text>
+  <text id="svg_8" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="24" y="34" x="127" stroke-width="0" stroke="#000000" fill="#000000">cxt={}</text>
+ </g>
+</svg>
+]
+
+- A recurring theme
+
+    ```ocaml
+    f (cxt, LAM (x, t, e)) = .... f ((x,t) :: cxt, e) ....
+    ```
+---
+# How Type Systems are Defined
+- $e:t$ means $e$ has type $t$
+
+- When $e_1\, e_2$ occurs in some context `cxt`, for some $\alpha,\beta$ we will have...
+    * $e_1 : \alpha\to\beta$ in `cxt`
+    * $e_2 : \alpha$ in `cxt`
+    * $e_1\, e_2 : \beta$ in `cxt`
+
+- The definition is a sort of relation and it holds iff the $\`\`$shape$"$ is correct.
+    * $e_1\, e_2:\mathbf{int}$ with $e_1 : \mathbf{char} \to \mathbf{int}$, $e_2 : \mathbf{char}$: OK
+    * $e_1\, e_2$ with $e_1 : \mathbf{bool} \to \mathbf{string}$, $e_2 : \mathbf{int}$: NO
+    * $e_1\, e_2$ with $e_1 : \mathbf{int}$: NO
+---
+# Other rules
+- $x$ has type $t$ precisely when $(x\colon t)\in\mathtt{cxt}$<br>(Lookup
+    the type of $x$ in the current context)
+- When $\lambda x.e$ occurs the context `cxt`, for some $\alpha,\beta$ ...
+    * $x$ has type $\alpha$
+
+    * $e$ has type $\beta$ in the context $\\{x\colon \alpha\\}\cup \mathtt{cxt}$
+
+    ```cpp
+    auto f(int x) -> bool { return x == 0; }
+
+    // 'x' has type 'int'
+    // 'x == 0' has type 'bool'
+    // 'f' (will) has type  'bool(*)(int)', or roughly 'int -> bool'
+    ```
+
+- The case for $\lambda (x\colon t).e$ is similar. Just that $x$ has type $t$.
+---
+# Problems with Typing Rules
+- $e_1\;e_2$ : $\exists \alpha,\beta$ s.t. ...
+    * $e_1:\alpha\to\beta$
+    * $e_2:\alpha$
+    * $e_1\;e_2:\beta$
+    *  There's simply no clue for $\alpha$ even if we know $\beta$.
+
+- $\lambda x.e$ : $\exists \alpha,\beta$ s.t. ...
+    * $x : \alpha$
+    * $e : \beta$
+    * $(\lambda x.e) : \alpha\to\beta$
+    * Gotta know $\alpha\to\beta$ in order to proceed. Or do we?
+
+---
+# First Solution
+- Sticking to $\lambda (x\colon t).e$, i.e. users are require to *annotate* $\alpha$
+    * Variables are added to the context only in this case, and we
+      know their types now
+
+    * $e$ can only refer to variables in current context
+
+    * Hence we can *infer* the type of $e$.
+
+- $x$ : Lookup `cxt`
+
+- $e_1\, e_2$ : Infer the type of $e_1$ and $e_2$, respectively. Check their shape.
+
+- $\lambda (x\colon t).e$ : Infer the type (say $t'$) of $e$. Then the type of
+  $\lambda (x\colon t).e$ is $t\to t'$
+---
+# First Solution
+
+```haskell
+let rec infer = function
+    cxt, VAR x -> List.assoc x cxt
+
+  | cxt, LAM (x, t1, e) -> TARR (t1, infer ((x,t1)::cxt, e))
+
+  | cxt, (AP (e1, e2) as e) ->
+
+     (match infer (cxt, e1), infer (cxt, e2) with
+       TARR (t1, t2), t1' when t1 = t1' -> t2
+     | _ -> ERROR!!!
+```
+
+- Problem: it's too verbose
+
+    ```haskell
+    \(z : A). let ididid = \(h : (A &rightarrow; A) &rightarrow; A &rightarrow; A). h in
+
+              ididid (\(f : A &rightarrow; A). f) (\(x:A).x) z
+    ```
+
+    - Why bother annotating $f$ and $x$ if the type of $\mathit{ididid}$ is known
+        (hence the type of its argumetns)?
+
+---
+# Improvement via Bidirectional Typing
+
+- Another motivation: We wish to turn judgments into functions, and make typing
+    rules syntax-directed.
+
+$\displaystyle \frac{(x:t)\in \Gamma}{\Gamma \vdash x:t} \quad \quad \frac{\Gamma,(x\colon t)\vdash e:t'}{\Gamma \vdash (\lambda x.e):t\to t'} \quad\quad \frac{\Gamma \vdash e_1:t\to t' \quad \Gamma \vdash e_2:t}{\Gamma \vdash e_1\,e_2:t'}$
+
+--
+
+- Annotate judgments with I/O modes to get a function
+
+    * $\Gamma\_\mathtt{in} \vdash x\_\mathtt{in}:t\_\mathtt{out}$ : Use following
+      principles to examine and rewrite typing rules accordingly.
+
+\\[ \text{recursion} \Uparrow\;\; \frac{(\Gamma,x\colon t)\_\mathtt{shown\\\_in}\vdash e\_\mathtt{shown\\\_in}:t'\_\mathtt{assumed\\\_out,free}}{\Gamma\_\mathtt{assumed\\\_in} \vdash (\lambda (x\colon t).e)\_\mathtt{assumed\\\_in}:(t\to t')\_\mathtt{shown\\\_out}} \;\; \Downarrow \text{return} \\]
+
+- Separating type **checking** and **inference**:
+
+\\[ \Gamma\_\mathtt{in} \vdash e\_\mathtt{in}\Rightarrow t\_\mathtt{out} \;\;\text{(infer)}\quad\quad \Gamma\_\mathtt{in} \vdash e\_\mathtt{in}\Leftarrow t\_\mathtt{in} \;\;\text{(check)}\\]
+
+---
+# Bidirectional Typing, Intuitively
+
+- Separating type **checking** and **inference**. If we already know $t$, **check** $e$ against $t$. Otherwise **infer** $t$ from $e$.
+
+    ```haskell
+    val check : context * expr *  type -> unit
+    val infer : context * expr -> type
+    ```
+
+- $x$: Simple, look up the type of $x$ in `cxt`
+
+- If an expression $e$ can be inferred to have type $t$, then it can be checked
+    against $t$. That is,
+
+    ```haskell
+    function check(cxt, e, t):
+      let t' = infer(cxt, e)
+      if t &ne; t':
+        error
+    ```
+
+.footnote[$\dagger$See appendix for typing rules.]
+---
+# Bidirectional Typing, Intuitively
+
+- The case $e_1\, e_2$
+    1. $e_1:\alpha\to\beta$
+    1. $e_2:\alpha$
+    1. $e_1\,e_2:\beta$
+
+- There's no way to know $\alpha$, regardless whether $\beta$ is known or not.
+- Must **infer** the type of $e_1$. Then $e_2$ can be check to have type $\alpha$.
+    Luckily, most cases the funtion $e_1$ are known from the context.
+
+    ```haskell
+    function infer(cxt, AP (e1, e2)):
+      -- Failed if e1 is not of function type
+      let TARR (t1, t2) = infer(cxt, e1)
+      check(cxt, e2, t1)
+      return t2
+    ```
+---
+# Bidirectional Typing, Intuitively
+
+- The case $\lambda x.e$, $\lambda (x\colon t).e$
+    1. $x : \alpha$
+    1. $e : \beta$
+    1. $(\lambda x.e) : \alpha\to\beta$, $(\lambda (x\colon \alpha).e) : \alpha\to\beta$
+
+- To check is .delete[human]simple.
+
+    ```haskell
+    function check(cxt, LAM (x, e), TARR (t, t')):
+      check((x,t) :: cxt,  e,  t')
+    ```
+
+- To infer, .delete[divine] $x$ needs an annotation.
+
+    ```haskell
+    function infer(cxt, ALAM (x, t, e)):
+      return (TARR (t, infer ((x,t) :: cxt,  e)))
+    ```
+---
+# Bidirectional Typing, Intuitively
+
+- Even better: we allow the user annotate expressions with types
+
+- An expression $\`\`e:t"$ can be **inferred** to have type $t$
+  while we check $e$ against $t$.
+
+    ```haskell
+    function infer(cxt, ANNO (e, t)):
+      check(cxt, e, t)
+      return t
+    ```
+
+- Examples
+
+    ```haskell
+    (\x. \f. f x) : (A &rightarrow; (A &rightarrow; B) &rightarrow; B)
+
+    \(z : A). let ididid = \(h : (A &rightarrow; A) &rightarrow; A &rightarrow; A). h in
+
+              ididid (\f.f) (\x.x) z
+    ```
+---
+# An Bidirectional Typing Example
+\\[
+\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow
+\\]
+---
+# An Bidirectional Typing Example
+\\[
+\dfrac
+{
+  \vdash \lambda(x\colon a\\!\to\\!a).x \Rightarrow
+  \quad\quad
+  \vdash \lambda y.y \Leftarrow
+}
+{\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow}
+\\]
+---
+# An Bidirectional Typing Example
+\\[
+\dfrac
+{
+  \dfrac
+  {x\colon a\\!\to\\!a \vdash x \Rightarrow}
+  {\vdash \lambda(x\colon a\\!\to\\!a).x \Rightarrow}
+  \quad\quad
+  \vdash \lambda y.y \Leftarrow
+}
+{\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow}
+\\]
+---
+# An Bidirectional Typing Example
+\\[
+\dfrac
+{
+  \dfrac
+  {\dfrac{}{x\colon a\\!\to\\!a \vdash x \Rightarrow  a\\!\to\\!a}}
+  {\vdash \lambda(x\colon a\\!\to\\!a).x \Rightarrow}
+  \quad\quad
+  \vdash \lambda y.y \Leftarrow
+}
+{\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow}
+\\]
+---
+# An Bidirectional Typing Example
+\\[
+\dfrac
+{
+  \dfrac
+  {\dfrac{}{x\colon a\\!\to\\!a \vdash x \Rightarrow  a\\!\to\\!a}}
+  {\vdash \lambda(x\colon a\\!\to\\!a).x \Rightarrow  (a\\!\to\\!a)\\!\to\\!a\\!\to\\!a}
+  \quad\quad
+  \vdash \lambda y.y \Leftarrow a\\!\to\\!a
+}
+{\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow a\\!\to\\!a}
+\\]
+---
+# An Bidirectional Typing Example
+\\[
+\dfrac
+{
+  \dfrac
+  {\dfrac{}{x\colon a\\!\to\\!a \vdash x \Rightarrow  a\\!\to\\!a}}
+  {\vdash \lambda(x\colon a\\!\to\\!a).x \Rightarrow  (a\\!\to\\!a)\\!\to\\!a\\!\to\\!a}
+  \quad\quad
+  \dfrac
+  {y\colon a\vdash y \Leftarrow a}
+  {\vdash \lambda y.y \Leftarrow a\\!\to\\!a}
+}
+{\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow a\\!\to\\!a}
+\\]
+---
+# An Bidirectional Typing Example
+\\[
+\dfrac
+{
+  \dfrac
+  {\dfrac{}{x\colon a\\!\to\\!a \vdash x \Rightarrow  a\\!\to\\!a}}
+  {\vdash \lambda(x\colon a\\!\to\\!a).x \Rightarrow  (a\\!\to\\!a)\\!\to\\!a\\!\to\\!a}
+  \quad\quad
+  \dfrac
+  {\dfrac
+    {\dfrac{}{y\colon a\vdash y \Rightarrow a}}
+    {y\colon a\vdash y \Leftarrow a}}
+  {\vdash \lambda y.y \Leftarrow a\\!\to\\!a}
+}
+{\vdash (\lambda(x\colon a\\!\to\\!a).x) (\lambda y.y) \Rightarrow a\\!\to\\!a}
+\\]
+---
+# An Equational Approach
+- The case $e_1\, e_2$
+    1. $e_1:\alpha\to\beta$
+    1. $e_2:\alpha$
+    1. $e_1\,e_2:\beta$
+
+- Does not knowing $\alpha$ really matter?
+
+    * Set up a constraint and solve it latter!
+
+    * Let $e_1 : t$ and $e_2:t'$
+
+    * $t=t'\to t''$ for some unknown $t''$
+---
+# An Equational Approach
+
+\\[
+\vdash \lambda f.\lambda z.f\,z\,z:\\\_
+\\]
+---
+# An Equational Approach
+
+\\[
+\dfrac
+{f\colon t\_1\vdash \lambda z.f\,z\,z:\\\_}
+{\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+\\]
+
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_1,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{\Gamma\vdash f\,z\,z:\\\_}
+{
+  \dfrac
+  {f\colon t\_1\vdash \lambda z.f\,z\,z:\\\_}
+  {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+}
+\\]
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_1,\; z\colon t\_2$.
+
+\\[
+\dfrac{\Gamma\vdash f\,z:\\\_}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:\\\_}
+  {
+    \dfrac
+    {f\colon t\_1\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_1,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_1}
+  {\Gamma\vdash f\,z:\\\_}
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:\\\_}
+  {
+    \dfrac
+    {f\colon t\_1\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_1,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_1 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:\\\_}
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:\\\_}
+  {
+    \dfrac
+    {f\colon t\_1\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_1,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_1 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_3}
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:\\\_}
+  {
+    \dfrac
+    {f\colon t\_1\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+
+$t\_1=t\_2\to t\_3$
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_2\to t\_3 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_3}
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:\\\_}
+  {
+    \dfrac
+    {f\colon t\_2\to t\_3\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+
+$t\_1=t\_2\to t\_3$
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_2\to t\_3 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_3}
+  \quad\quad
+  \Gamma\vdash z:t\_2
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:\\\_}
+  {
+    \dfrac
+    {f\colon t\_2\to t\_3\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_2\to t\_3 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_3}
+  \quad\quad
+  \Gamma\vdash z:t\_2
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:t\_4}
+  {
+    \dfrac
+    {f\colon t\_2\to t\_3\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+
+$t\_3=t\_2\to t\_4$
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_2\to t\_2\to t\_4 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_2\to t\_4}
+  \quad\quad
+  \Gamma\vdash z:t\_2
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:t\_4}
+  {
+    \dfrac
+    {f\colon t\_2\to t\_2\to t\_4\vdash \lambda z.f\,z\,z:\\\_}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+
+$t\_3=t\_2\to t\_4$
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_2\to t\_2\to t\_4 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_2\to t\_4}
+  \quad\quad
+  \Gamma\vdash z:t\_2
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:t\_4}
+  {
+    \dfrac
+    {f\colon t\_2\to t\_2\to t\_4\vdash \lambda z.f\,z\,z:t\_2\to t\_4}
+    {\vdash \lambda f.\lambda z.f\,z\,z:\\\_}
+  }
+}
+\\]
+---
+# An Equational Approach
+
+- Write $\Gamma :\equiv f\colon t\_2\to t\_3,\; z\colon t\_2$.
+
+\\[
+\dfrac
+{
+  \dfrac
+  {\Gamma\vdash f:t\_2\to t\_2\to t\_4 \quad\quad \Gamma\vdash z:t\_2}
+  {\Gamma\vdash f\,z:t\_2\to t\_4}
+  \quad\quad
+  \Gamma\vdash z:t\_2
+}
+{
+  \dfrac
+  {\Gamma\vdash f\,z\,z:t\_4}
+  {
+    \dfrac
+    {f\colon t\_2\to t\_2\to t\_4\vdash \lambda z.f\,z\,z:t\_2\to t\_4}
+    {\vdash \lambda f.\lambda z.f\,z\,z:(t\_2\to t\_2\to t\_4)\to t\_2\to t\_4}
+  }
+}
+\\]
+
+---
+# An Equational Approach
+
+.center[.redbbox[$\lambda f.\lambda z. f z z$]]
+
+- Allocate fresh unknown $t_1$
+
+.pull-left[
+]
+
+.pull-right[
+- Case $\lambda x.e$ with $x :\equiv f$,$e:\equiv \lambda z. f z z$
+    * $x:\alpha$
+    * $e:\beta$
+    * $(\lambda x.e):\alpha\to\beta$
+
+- Context: $[]$
+]
+
+Now $f:t_1$
+---
+# An Equational Approach
+
+.center[$\lambda f.$.redbbox[$\lambda z. f z z$]]
+
+- Allocate fresh unknown $t_2$
+
+.pull-left[
+]
+
+.pull-right[
+- Case $\lambda x.e$ with $x :\equiv z$,$e:\equiv f z z$
+    * $x:\alpha$
+    * $e:\beta$
+    * $(\lambda x.e):\alpha\to\beta$
+
+- Context: $[(f\colon t_1)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$.redbbox[$f z z$]]
+
+- Recursion.
+
+.pull-left[
+]
+
+.pull-right[
+- Case $e_1\,e_2$ with $e_1 :\equiv fz$,$e_2:\equiv z$
+    * $e_1:\alpha\to\beta$
+    * $e_2:\alpha$
+    * $e_1\,e_2:\beta$
+
+- Context: $[(f\colon t_1),(z\colon t_2)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$.redbbox[$f z$] $z$]
+
+- Recursion.
+
+.pull-left[
+]
+
+.pull-right[
+- Case $e_1\,e_2$ with $e_1 :\equiv f$,$e_2:\equiv z$
+    * $e_1:\alpha\to\beta$
+    * $e_2:\alpha$
+    * $e_1\,e_2:\beta$
+
+- Context: $[(f\colon t_1),(z\colon t_2)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$.redbbox[$f$] $z z$]
+
+- Lookup context and return $t_1$.
+
+.pull-left[
+]
+
+.pull-right[
+- Case $x$ with $x :\equiv f$
+    <br>
+
+    * $x:\alpha$
+    * $(x\colon \alpha)\in\mathtt{cxt}$
+
+<br>
+
+- Context: $[(f\colon t_1),(z\colon t_2)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$ $f$.redbbox[$z$]$z$]
+
+- Lookup context and return $t_2$.
+
+.pull-left[
+]
+
+.pull-right[
+- Case $x$ with $x :\equiv z$
+    <br>
+
+    * $x:\alpha$
+    * $(x\colon \alpha)\in\mathtt{cxt}$
+
+<br>
+
+- Context: $[(f\colon t_1),(z\colon t_2)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$.redbbox[$f z$]$z$]
+
+- Allocate fresh unknown $t_3$. Return $t_3$.
+
+.pull-left[
+$t_1=t_2\to t_3$
+]
+
+.pull-right[
+- Case $e_1\,e_2$ with $e_1 :\equiv f$,$e_2:\equiv z$
+    * $e_1:\alpha\to\beta$
+    * $e_2:\alpha$
+    * $e_1\,e_2:\beta$
+
+- Context: $[(f\colon t_1),(z\colon t_2)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$ $fz$.redbbox[$z$]]
+
+- Lookup context and return $t_2$.
+
+.pull-left[
+$t_1=t_2\to t_3$
+]
+
+.pull-right[
+- Case $x$ with $x :\equiv z$
+    <br>
+
+    * $x:\alpha$
+    * $(x\colon \alpha)\in\mathtt{cxt}$
+
+<br>
+
+- Context: $[(f\colon t_1),(z\colon t_2)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2$
+---
+# An Equational Approach
+
+.center[$\lambda f.\lambda z.$.redbbox[$f z z$]]
+
+- Allocate fresh unknown $t_4$. Return $t_4$.
+
+.pull-left[
+$t_1=t_2\to t_3$<br>
+$t_3=t_2\to t_4$
+]
+
+.pull-right[
+- Case $e_1\,e_2$ with $e_1 :\equiv fz$,$e_2:\equiv z$
+    * $e_1:\alpha\to\beta$
+    * $e_2:\alpha$
+    * $e_1\,e_2:\beta$
+
+- Context: $[(f\colon t_1),(z\colon t_2)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3$
+---
+# An Equational Approach
+
+.center[$\lambda f.$.redbbox[$\lambda z.f z z$]]
+
+- Return $t_2\to t_4$
+
+.pull-left[
+$t_1=t_2\to t_3$<br>
+$t_3=t_2\to t_4$
+]
+
+.pull-right[
+- Case $\lambda x.e$ with $x :\equiv z$,$e:\equiv f z z$
+    * $x:\alpha$
+    * $e:\beta$
+    * $(\lambda x.e):\alpha\to\beta$
+
+- Context: $[(f\colon t_1)]$
+]
+
+Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3 \quad\quad fzz:t_4$
+---
+# An Equational Approach
+
+.center[.redbbox[$\lambda f.\lambda z. f z z$]]
+
+- Return $t_1\to (t_2\to t_4)$
+
+.pull-left[
+$t_1=t_2\to t_3$<br>
+$t_3=t_2\to t_4$
+]
+
+.pull-right[
+- Case $\lambda x.e$ with $x :\equiv f$,$e:\equiv \lambda z. f z z$
+    * $x:\alpha$
+    * $e:\beta$
+    * $(\lambda x.e):\alpha\to\beta$
+
+- Context: $[]$
+]
+
+Now $f:t_1 \quad\quad z:t_2 \quad\quad fz:t_3 \quad\quad fzz:t_4 \quad\quad (\lambda z.fzz):t_2\to t_4$
+---
+# Solving Equations
+- At top level: $(\lambda f.\lambda z. f z z):t_1\to t_2\to t_4$
+
+- $(f:t_1)$, $(z:t_2)$, $(fz:t_3)$, $(fzz:t_4)$, $(\lambda z.fzz):t_2\to t_4$
+
+    $t_1=t_2\to t_3$<br>
+    $t_3=t_2\to t_4$
+---
+# Solving Equations
+- At top level: $(\lambda f.\lambda z. f z z):(t_2\to t_3)\to t_2\to t_4$
+
+- $(f:t_2\to t_3)$, $(z:t_2)$, $(fz:t_3)$, $(fzz:t_4)$, $(\lambda z.fzz):t_2\to t_4$
+
+    $t_1=t_2\to t_3$<br>
+    $t_3=t_2\to t_4$
+
+- Substitute $t_2\to t_3$ for $t_1$!
+---
+# Solving Equations
+- At top level: $(\lambda f.\lambda z. f z z):(t_2\to t_2\to t_4)\to t_2\to t_4$
+
+- $(f:t_2\to t_2\to t_4)$, $(z:t_2)$, $(fz:t_2\to t_4)$, $(fzz:t_4)$, $(\lambda z.fzz):t_2\to t_4$
+
+    $t_1=t_2\to t_3$<br>
+    $t_3=t_2\to t_4$
+
+- Substitute $t_2\to t_4$ for $t_3$!
+
+---
+# Solving Equations
+- At top level: $(\lambda f.\lambda z. f z z):(t_2\to t_2\to t_4)\to t_2\to t_4$
+
+- $(f:t_2\to t_2\to t_4)$, $(z:t_2)$, $(fz:t_2\to t_4)$, $(fzz:t_4)$, $(\lambda z.fzz):t_2\to t_4$
+
+    $t_1=t_2\to t_3$<br>
+    $t_3=t_2\to t_4$
+
+- No more $t_1$ and $t_3$. Done!
+
+.center[.greenbbox[$(\lambda f.\lambda z. f z z):(A\to A\to B)\to A\to B$]]
+
+- There might be equations of form $T_1\to T_2=T_3\to T_4$. We can simply
+  solve $T_1=T_3$ and $T_2=T_4$ recursively, arriving at equations of form
+  $t_i = T_j$.
+
+---
+# Disjoint Sets to the Rescue
+
+- Union and Find!
+
+- Our data type for meta-types:
+
+    ```haskell
+    type typ = TVAR of (metavar ref)
+             | TARR of typ * typ
+    and metavar = UNLINK of string
+                | LINK of typ
+    ```
+
+    * Disjoint set (`metavar ref`) is integraed into
+      (meta-) types `typ`
+
+- A `'a ref` is a mutable variable of type `'a`
+
+    ```haskell
+    let tvar = ref (UNLINK "x")
+    let t = TARR (TVAR tvar, TVAR var)
+    print t     --  => x -> x
+
+    let t' = TVAR (ref (UNLINK "A"))
+    tvar := BOUND (TARR (t', t'))
+    print t     --  => (t -> t) -> t -> t
+    ```
+---
+# Unification: Solve an Equation
+- $t\_i = T$ (or $= (\\\_ \to \\\_), ...$) &Rightarrow; substitute RHS for $t\_i$ (*)
+
+- $T_1\to T_2=T_3\to T_4$ &Rightarrow; Solve $T_1=T_3$, $T_2=T_4$ recursively.
+
+```haskell
+function unify(TVAR (r = LINK t), t'):   -- &leftarrow; Find
+  unify(t, t')
+
+function unify(TVAR (r = UNLINK x), TVAR (s = UNLINK y)), x == y:
+  no-op
+
+function unify(TVAR (r = UNLINK x), t): -- &leftarrow; Union
+  if occurs(x, t):  -- &leftarrow; See &diamond;&diamond;page
+    ERROR!!
+  r := LINK t
+
+function unify(TARR (t1, t2), TARR (t3, t4)):
+  unify(t1, t3)
+  unify(t2, t4)
+```
+
+- The case for `t, TVAR _` the same
+---
+# Final Step
+- Case $x$
+    ```haskell
+    function typeinfer(cxt, VAR x):
+      return (lookup x in cxt)
+    ```
+
+- Case $e_1\,e_2$
+    ```haskell
+    function typeinfer(cxt, AP (e1, e2)):
+      let t1 = typeinfer(cxt, e1)
+      let t2 = typeinfer(cxt, e2)
+      let t = fresh_var()
+      unify(t1, TARR (t2, t))
+      return t
+    ```
+
+- Case $\lambda x.e$
+    ```haskell
+    function typeinfer(cxt, LAM (x, e)):
+      let t = fresh_var()
+      return (TARR (t, typeinfer((x,t) :: cxt,  e)))
+    ```
+---
+# (*) Occurs Check
+- Infer $\lambda x.xx$: Get equation $x:t_1$, $xx:t_2$ and $t_1=t_1\to t_2$
+
+    * Cannot eliminate $t_1$ by substituting $t_1\to t_2$ for $t_1$!
+
+.center[
+<svg width="220" height="250" xmlns="http://www.w3.org/2000/svg" xmlns:se="http://svg-edit.googlecode.com">
+ <!-- Created with SVG-edit - http://svg-edit.googlecode.com/ -->
+ <g>
+  <title>圖層 1</title>
+  <polyline stroke-dasharray="2,2" se:connector="svg_20 svg_14" fill="none" stroke-width="3" stroke="#ff0000" points="175.594 194.626 129.398 184.509 83.2031 174.392" id="svg_23"/>
+  <polyline stroke-dasharray="2,2" se:connector="svg_13 svg_20" fill="none" stroke-width="3" stroke="#ff0000" points="50.4063 217.827 113 209 175.594 200.173" id="svg_22"/>
+  <text font-weight="normal" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="32" id="svg_2" y="79" x="51" stroke-width="0" stroke="#000000" fill="#000000">x</text>
+  <text xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="32" id="svg_3" y="77" x="136" stroke-width="0" stroke="#000000" fill="#000000">@</text>
+  <text id="svg_4" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="32" y="125.5" x="168" stroke-width="0" stroke="#000000" fill="#000000">x</text>
+  <text id="svg_5" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="32" y="125.5" x="107" stroke-width="0" stroke="#000000" fill="#000000">x</text>
+  <text font-weight="normal" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="18" id="svg_6" y="79" x="74" stroke-width="0" stroke="#000000" fill="#000000">:t1</text>
+  <line stroke-width="2" id="svg_7" y2="58.999999" x2="64" y1="38" x1="81.999999" stroke-linecap="null" stroke-linejoin="null" stroke="#000000" fill="none"/>
+  <line id="svg_9" y2="105" x2="113" y1="87" x1="128" stroke-linecap="null" stroke-linejoin="null" stroke-width="2" stroke="#000000" fill="none"/>
+  <line id="svg_11" stroke-width="2" y2="58.499999" x2="129" y1="37.5" x1="112" stroke-linecap="null" stroke-linejoin="null" stroke="#000000" fill="none"/>
+  <line id="svg_12" y2="105" x2="162.500001" y1="87" x1="146.5" stroke-linecap="null" stroke-linejoin="null" stroke-width="2" stroke="#000000" fill="none"/>
+  <text id="svg_13" font-weight="normal" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="28" y="229.5" x="35" stroke-width="0" stroke="#000000" fill="#000000">t1</text>
+  <text font-weight="bold" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="32" id="svg_1" y="35" x="97" stroke-width="0" stroke="#000000" fill="#000000">λ</text>
+  <text id="svg_14" font-weight="bold" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="48" y="187.5" x="70" stroke-width="0" stroke="#000000" fill="#000000">→</text>
+  <line id="svg_17" stroke-width="2" y2="208.749999" x2="36.5" y1="187.75" x1="54.499999" stroke-linecap="null" stroke-linejoin="null" stroke="#000000" fill="none"/>
+  <line id="svg_18" stroke-width="2" y2="208.249999" x2="101.5" y1="187.25" x1="84.5" stroke-linecap="null" stroke-linejoin="null" stroke="#000000" fill="none"/>
+  <text id="svg_19" font-weight="normal" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="28" y="229.5" x="102" stroke-width="0" stroke="#000000" fill="#000000">t2</text>
+  <text id="svg_20" font-weight="normal" xml:space="preserve" text-anchor="middle" font-family="Monospace" font-size="28" y="207.5" x="191" stroke-width="0" stroke="#000000" fill="#000000">t1</text>
+ </g>
+</svg>
+]
+
+- In equation $t_i = T$, it's an error if $t_i$ occurs in $T$.
+---
+# Pseudo(?) Code...
+
+- The accompanying code further handles exception and translate
+  LC terms into STLC terms.
+
+```haskell
+type typ = TVAR of metavar ref | TARR of typ * typ
+and metavar = UNLINK of string | LINK of typ
+
+let rec unify = function
+    TVAR {contents = LINK t}, t' |
+    t', TVAR {contents = LINK t} ->
+      unify (t, t')
+  | TVAR ({contents = UNLINK x}), TVAR ({contents = UNLINK x'})
+      when x = x' -> ()
+  | TVAR ({contents = UNLINK x} as r), t |
+    t, TVAR ({contents = UNLINK x} as r) ->
+      if occurs (x, t) then raise Occurs_check else r := LINK t
+  | TARR (t1, t2), TARR (t1', t2') ->
+      (unify (t1, t1'); unify (t2, t2')
+
+let rec infer = function
+    cxt, VAR x -> List.assoc x cxt
+  | cxt, LAM (x, e) ->
+      let t = fresh_var () in
+      TARR (t, infer ((x, t)::cxt, e))
+  | cxt, AP (e1, e2) ->
+      let t = fresh_var () in
+      (unify (infer (cxt, e1), TARR (infer (cxt, e2), t));
+       t)
+```
+---
+# Polymorphism: Generic the Easy Way
+- C++ Style:
+
+    ```cpp
+    template&lt;typename a&gt;    a id(a x) { return x; }
+    id&lt;int&gt;(...)
+    id&lt;shared_ptr&lt;expr_t&gt;&gt;(...)
+    ```
+
+    Different code (semantics) when instantiated with different types
+
+- Functional Style:
+
+    * $(\lambda x.x):A\to A$ : OK.
+    * $(\lambda x.x):B\to B$ : OK.
+    * The same term $(\lambda x.x) : T\to T$ is OK for any type $T$!
+    * Let give it the type $\forall T.\, T\to T$
+---
+# Polymorphism: Girard's System F
+
+<table>
+  <thead>
+    <tr>
+      <th>
+        In Slide
+      </th>
+      <th>
+        In Code
+      </th>
+      <th>
+        Analogy
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>$\Lambda \alpha.e$</td>
+      <td><pre>TLAM ("a", e)</pre></td>
+      <td><pre><code class="hljs">def foo[a](...) = ...
+fn bar&amp;lt;a&amp;gt;(...) { ... }
+template&amp;lt;typename a&amp;gt; e
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>$e\;[t]$</td>
+      <td><pre>TAP (e, t)</pre></td>
+      <td><pre><code class="hljs">e&amp;lt;t&amp;gt;()
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>A</td>
+      <td><pre>TVAR "A"</pre></td>
+      <td><pre><code class="hljs">a, T (Haskell)
+typename A, T    (roughly)
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>$t_1 \to t_2$</td>
+      <td><pre>TARR (t1, t2)</pre></td>
+      <td><pre><code class="hljs">t1 -> t2
+function&amp;lt;t2(t1)&amp;gt;
+t2(*)(t1)        (roughly)
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>$\forall a. t$</td>
+      <td><pre>TALL (a, t)</pre></td>
+      <td><pre><code class="hljs">forall a. t
+
+{a : Set l} &rightarrow; t
+
+&forall;{a} &rightarrow; t
+</code></pre></td>
+    </tr>
+  </tbody>
+</table>
+---
+# Examples
+- Slide &amp; Code: $\Lambda a. \Lambda b. \lambda(x\colon a).\lambda(f\colon a\to b). f x$
+
+    ```haskell
+    TALL("a", TALL ("b",
+      LAM ("x", TVAR "A",
+        LAM ("f", TARR (TVAR "A", TVAR "B"),
+          AP (VAR "f", VAR "x")))))
+    ```
+
+- Rust: (**not sure**)
+
+    ```rust
+    fn app&lt;A,B&gt;(x : A, f : fn(A) -> B) -> B {
+      f(x)
+    }
+    ```
+
+- C++ (roughly):
+    ```cpp
+    template&lt;typename A,typename B&gt;
+    B app(A x, function&lt;B(A)&gt; f) {
+      return f(x);
+    }
+    ```
+---
+# Examples
+
+$\Lambda T.\Lambda S.$<br>
+$\;\;\;\;\underline{(\Lambda\alpha.\Lambda\beta.\lambda(f\colon \alpha\to\beta).\lambda(z\colon \alpha).f\,z)\; [T]}\; [S\to S]\; (\lambda (x\colon T).\lambda(y\colon S).y)$
+
+$\leadsto\Lambda T.\Lambda S.$<br>
+$\;\;\;\;\underline{(\Lambda\beta.\lambda(f\colon}$ .redbbox[$T$]$\underline{\\!\to\\!\beta).\lambda(z\colon}$.redbbox[$T$]$\underline{).f\,z)\; [S\\!\to\\!S]}\; (\lambda (x\colon T).\lambda(y\colon S).y)$
+
+$\leadsto\Lambda T.\Lambda S.$<br>
+$\;\;\;\;\underline{(\lambda(f\colon T\to}$.redbbox[$S$]$\underline{\to}$.redbbox[$S$]$\underline{).\lambda(z\colon T).f\,z) (\lambda (x\colon T).\lambda(y\colon S).y)}$
+
+$\leadsto\Lambda T.\Lambda S.$<br>
+$\;\;\;\;\lambda(z\colon T) $.redbbox[$\underline{(\lambda (x\colon T).\lambda(y\colon S).y)}$]$\underline{z}$
+
+$\leadsto\Lambda T.\Lambda S.$<br>
+$\;\;\;\;\lambda(z\colon T) \lambda(y\colon S).y$
+
+---
+# Damas-Hindley-Milner System
+- Generalize at `let`. $\forall$-quantifiers are only allowed at $\`\`$top$"$ level
+
+    * $\forall a.\forall b. a\to b\to b$ :  OK
+    * $\forall a.\forall b. b\to (a\to b)\to b$ : OK
+    * $(\forall a. a\to a)\to\mathtt{Int}$ : Not OK
+
+- A type together with a list of $\forall$-quantified variables
+
+    ```haskell
+    type typescheme = POLY of string list * typ
+    ```
+
+- Generalization: (Not typeable in previous systems!)
+
+    $\mathbf{let}\; \mathit{id} = \lambda x.x\; \mathbf{in}$ &Leftarrow; Generalize at this point<br>
+    $\mathit{id}\; \mathit{id}\;\mathit{id}$
+---
+# Damas-Hindley-Milner System
+$\lambda u.$<br>
+$\;(\mathbf{let}\; \mathit{id} = $ .redbbox[$\lambda x.x$] $\mathbf{in}$<br>
+$\;\;\mathit{id}\; \mathit{id}\;\mathit{id})$
+
+- Inferred to be $t_1\to t_1$ by the preceding algorithm.<br>
+- $t_1$ is free: `UNLINK "t1"` and is not bound in `cxt`
+    * Assume that $u:t_3$.
+    * `cxt`-bound type variables like `UNLINK "t3"` in $\lambda (u:t_3).\; ...$ should not be generalized
+---
+# Damas-Hindley-Milner System
+$\lambda u.$<br>
+$\;(\mathbf{let}$ .redbbox[$\mathit{id}$] $= \lambda x.x\; \mathbf{in}$<br>
+$\;\;\mathit{id}\; \mathit{id}\;\mathit{id})$
+
+- Generalize unbound free variables ($t_1$ in this case)
+- $\mathit{id} : \forall t_1.\,t_1\to t_1$
+---
+# Damas-Hindley-Milner System
+$\lambda u.$<br>
+$\;(\mathbf{let}\; \mathit{id} = \Lambda t_1.\lambda (x\colon t_1).x\; \mathbf{in}$<br>
+$\;\;$.redbbox[$\mathit{id}\,[(t_2\to t_2)\to t_2\to t_2]\,\mathit{id}\,[t_2\to t_2]\,\mathit{id}\,[t_2]$]$)$
+
+- Being explicit...
+
+- Each use of $\mathit{id}$ is of different type. $t_2$ is another unbound type variable.
+
+---
+# Upgrading our Algorithm
+
+- Case $x$: Instantiate the term. Replace $\forall$-quantified type variables
+    with fresh type variables.
+
+      ```haskell
+      function typeinfer(cxt, VAR x):
+        return (instantiate(lookup x in cxt))
+      ```
+
+    * Instantiate: $\forall a. \forall b. a \to (a \to b) \to b$ becomes
+        $t_i\to (t_i\to t_j)\to t_j$ for **fresh** type variables $t_i$,$t_j$
+
+- Case $\mathbf{let}$
+    ```haskell
+    function typeinfer(cxt, LET (x, e1, e2)):
+      let t1 = typeinfer(cxt, e1)
+      return typeinfer((x,&forall;a.t1) :: cxt,  e2)
+    ```
+
+    * Quantify: calculate free variables `a`s of `t1` which are unbound in `cxt`, i.e. $\overline{a}:\equiv\mathit{FV}(t\_1)\setminus\left(\bigcup\_{t\in\mathtt{cxt}}\mathit{FV}(t)\right)$.
+---
+# Remarks
+* Bidirectional often allows an algorithm to be read off from the typing rules.
+    It is also comparatively easy to adapt bidirectional approach to
+    more sophisticated typing systems like `RankNTypes` [4] and dependently
+    typed languages [5] where full type inference can be undecidable.
+
+* There are still much work to do when turning a type system into a bidirectional
+    system. For example, our type system may have **subtyping** like
+    $\forall a\, b. a\to b\to a \prec \forall c. c\to c\to c$.
+    The user could have annotated less general type than expected.
+---
+# Remarks
+* Type checking System F (The one with $\Lambda a.e$, $e\,[t]$) might involve
+    checking equivalence between types. For example, should the following
+    term be accepted?
+
+    \\[ (\lambda (f\colon \forall \alpha. \alpha\\!\to\\!\alpha).\, f)\, (\Lambda \beta. \lambda (x\colon \beta).\, x) \\]
+
+    But the issue comes back when we have type constructors anyway.
+
+* Algorithm W (Type inference algorithm for HM System) is kind of global algorithm
+    whereas bidirectional approach propagates type information locally.
+
+* We can extend HM system with data types. This naturally leads to
+    a kind system on types that classifies type constructors.
+---
+# References
+1. .small[Frank Pfenning. CMU CS15-312 *Foundations of Programming Languages*
+    http://www.cs.cmu.edu/~fp/courses/15312-f04/index.html]
+
+1. .small[D. Christiansen. *Bidirectional Typing Rules: A Tutorial*
+    http://www.itu.dk/people/drc/tutorials/bidirectional.pdf]
+
+1. .small[Oleg Kiselyov. *How OCaml type checker works -- or what polymorphism and garbage collection have in common*.
+    http://okmij.org/ftp/ML/generalization.html]
+
+1. .small[Simon Peyton Jones, Dimitrios Vytiniotis,
+    Stephanie Weirich, and Mark Shields.
+    *Practical type inference for arbitrary-rank types*.
+    http://research.microsoft.com/en-us/um/people/simonpj/papers/higher-rank/]
+
+1. .small[Andres Löh, Conor McBride and Wouter Swierstra.
+    *A Tutorial Implementation of a Dependently Typed Lambda Calculus*.
+    http://www.andres-loeh.de/LambdaPi/]
+
+---
+# Language Syntax Quick Guide
+
+<table>
+  <thead>
+    <tr>
+      <th>
+        In Slide
+      </th>
+      <th>
+        In Code
+      </th>
+      <th>
+        Analogy
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>$x$</td>
+      <td><pre>VAR "x"</pre></td>
+      <td><pre><code class="hljs">x</code></pre></td>
+    </tr>
+    <tr>
+      <td>$\lambda x.e$<br>$\lambda (x\colon t).e$</td>
+      <td><pre>LAM ("x", e)
+LAM ("x", t, e)
+ALAM ("x", t, e)
+</pre></td>
+      <td>
+        <pre><code class="hljs">\x -> e
+function (x) { return e; }
+\(x :: t) -> e
+(x : t) => e
+[???](t x) { return e; }
+</code></pre>
+      </td>
+    </tr>
+    <tr>
+      <td>$e_1\;e_2$</td>
+      <td><pre>AP (e1, e2)</pre></td>
+      <td>
+        <pre><code class="hljs">e1 e2
+e1(e2)
+</code></pre>
+      </td>
+    </tr>
+    <tr>
+      <td>$\mathbf{let}\;x=e_1\;\mathbf{in}\;e_2$</td>
+      <td><pre>LET ("x", e1, e2)</pre></td>
+      <td><pre><code class="hljs">let x = e1 in e2
+val x = e1; e2
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>$e \colon t$</td>
+      <td><pre>ANNO (e,t)</pre></td>
+      <td><pre><code class="hljs">e :: t
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>$\Lambda \alpha.e$</td>
+      <td><pre>TLAM ("a", e)</pre></td>
+      <td><pre><code class="hljs">def foo[a](...) = ...
+fn bar&amp;lt;a&amp;gt;(...) { ... }
+template&amp;lt;typename a&amp;gt; e
+</code></pre></td>
+    </tr>
+    <tr>
+      <td>$e\;[t]$</td>
+      <td><pre>TAP (e, t)</pre></td>
+      <td><pre><code class="hljs">e&amp;lt;t&amp;gt;()
+</code></pre></td>
+    </tr>
+  </tbody>
+</table>
+---
+# Bidirectional Typing
+- $\Gamma\_\mathtt{in}\vdash e\_\mathtt{in}\Rightarrow t\_\mathtt{out}$ : $e$ can be inferred to have type $t$
+- $\Gamma\_\mathtt{in}\vdash e\_\mathtt{in}\Leftarrow t\_\mathtt{in}$ : $e$ can be checked against type $t$
+
+<br>
+
+\\[ \frac{(x\colon t)\in \Gamma}{\Gamma\vdash x\Rightarrow t} \quad\quad \frac{\Gamma,x \colon t\vdash e \Rightarrow t'}{\Gamma\vdash (\lambda(x\colon t).e)\Rightarrow t\to t'} \quad\quad \frac{\Gamma,x\colon t\vdash e\Leftarrow t'}{\Gamma\vdash (\lambda x.e)\Leftarrow t\to t'} \\]
+
+<br>
+
+\\[ \frac{\Gamma\vdash e_1\Rightarrow\alpha\to\beta \quad\quad \Gamma\vdash e_2\Leftarrow \alpha}{\Gamma \vdash e_1\,e_2 \Rightarrow \beta} \\]
+
+<br>
+
+\\[ \frac{\Gamma\vdash e\Leftarrow t}{\Gamma\vdash (e\colon t)\Rightarrow t} \quad\quad  \quad\quad \frac{\Gamma\vdash e\Rightarrow t' \quad\quad \Gamma \vdash t=t'}{\Gamma\vdash e\Leftarrow t} \\]
+</textarea>
+    <script src="./remark-0.10.2.min.js" type="text/javascript"></script>
+    <script type="text/javascript">
+      var slideshow = remark.create({
+        highlightStyle: 'ir_black'
+      });
+      MathJax.Hub.Config({
+        "HTML-CSS": { scale: 75 },
+        tex2jax: {
+          skipTags: ['code', 'script', 'noscript', 'style' ,'textarea', 'pre'],
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['\\[', '\\]']]
+        }
+      });
+      MathJax.Hub.Configured();
+    </script>
+    <div class="remark-notes-area">hello world</div>
+</body></html>
