@@ -36,6 +36,10 @@
                    (,f ,v ,k))))))]))
     (cpsk expr)))
 
+;; language:
+;;   e  ::=  n | x | (e1 e2) | (lambda (x) e)
+;;       |   (if e1 e2 e3) | (callcc e)
+
 (define-module simp
   (use util.match :only (match))
   (define (cps expr)
@@ -59,7 +63,7 @@
                `(lambda (,tmp) ,(k tmp)))]
             [else (error "cont-sym: unknown continuation type")]))
     (define (cont-trivial? k)
-      (cond [(eq? k 'id) #f]
+      (cond [(eq? k 'id) #t]
             [(symbol? k) #t]
             [else #f]))
     (define (cpsk expr k)
@@ -73,11 +77,19 @@
          (let* ([k1 (fresh "k")]
                 [v (fresh "v")])
            (if (cont-trivial? k)
-               `(,f (lambda (,v ,k1) (,(cont-sym k) ,v)) ,(cont-sym k))
+               `(,f (lambda (,v ,k1) ,(cont-ap k v)) ,(cont-sym k))
                (let ([k^ (fresh "k")])
                  `(let ([,k^ ,(cont-sym k)])
                     ,(cpsk f (lambda (f^)
                                `(,f^ (lambda (,v ,k1) (,k^ ,v)) ,k^)))))))]
+        [('if e1 e2 e3)
+         (if (cont-trivial? k)
+             (cpsk e1 (lambda (v)
+                        `(if ,v ,(cpsk e2 k) ,(cpsk e3 k))))
+             (let ([k1 (fresh "k")])
+               `(let ([,k1 ,(cont-sym k)])
+                  ,(cpsk e1 (lambda (v)
+                              `(if ,v ,(cpsk e2 k1) ,(cpsk e3 k1)))))))]
         [(e1 e2)
          (cpsk e1 (lambda (f)
                     (cpsk e2 (lambda (v)
@@ -97,6 +109,10 @@
     (lambda (x) (lambda (x) (f x)))
     ((lambda (u) (u u)) (lambda (x) (x x)))
     (add1 (callcc (lambda (esc) (esc 5))))
+    ((lambda (x) x)
+     (callcc (lambda (f)
+               (callcc (lambda (e)
+                         (e e))))))
     ))
 
 (define (test-all test-proc)
