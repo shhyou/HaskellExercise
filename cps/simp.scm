@@ -39,15 +39,22 @@
        (let* ([k1 (fresh "k")]
               [v (fresh "v")])
          (cpsk f (lambda (f^)
-                   ((if (cont-trivial? k)
-                        (lambda (f)
-                          (f k))
-                        (lambda (f)
-                          (let ([k^ (fresh "k")])
-                            `(let ([,k^ ,(cont-sym k)])
-                               ,(f k^)))))
-                    (lambda (k^)
-                      `(,f^ (lambda (,v ,k1) ,(cont-ap k^ v)) ,(cont-sym k^x)))))))]
+                   (let ([build-cont
+                          (lambda (k^)
+                            `(,f^ (lambda (,v ,k1) ,(cont-ap k^ v)) ,(cont-sym k^)))])
+                     (if (cont-trivial? k)
+                         (build-cont k)
+                         (let ([k^ (fresh "k")])
+                           `(let ([,k^ ,(cont-sym k)])
+                              ,(build-cont k^))))))))]
+      [('reset e)
+       `(,(cont-sym k) ,(cpsk e 'id))]
+      [('shift f)
+       (let* ([k1 (fresh "k")]
+              [v (fresh "v")]
+              [x (fresh "x")])
+         (cpsk f (lambda (f^)
+                   `(,f^ (lambda (,v ,k1) (,k1 ,(cont-ap k v))) (lambda (,x) ,x)))))]
       [('if e1 e2 e3)
        (if (cont-trivial? k)
            (cpsk e1 (lambda (v)
