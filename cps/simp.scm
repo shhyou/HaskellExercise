@@ -38,13 +38,16 @@
       [('callcc f)
        (let* ([k1 (fresh "k")]
               [v (fresh "v")])
-         (if (cont-trivial? k)
-             (cpsk f (lambda (f^)
-                       `(,f^ (lambda (,v ,k1) ,(cont-ap k v)) ,(cont-sym k))))
-             (let ([k^ (fresh "k")])
-               `(let ([,k^ ,(cont-sym k)])
-                  ,(cpsk f (lambda (f^)
-                             `(,f^ (lambda (,v ,k1) (,k^ ,v)) ,k^)))))))]
+         (cpsk f (lambda (f^)
+                   ((if (cont-trivial? k)
+                        (lambda (f)
+                          (f k))
+                        (lambda (f)
+                          (let ([k^ (fresh "k")])
+                            `(let ([,k^ ,(cont-sym k)])
+                               ,(f k^)))))
+                    (lambda (k^)
+                      `(,f^ (lambda (,v ,k1) ,(cont-ap k^ v)) ,(cont-sym k^x)))))))]
       [('if e1 e2 e3)
        (if (cont-trivial? k)
            (cpsk e1 (lambda (v)
