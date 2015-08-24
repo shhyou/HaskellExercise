@@ -5,9 +5,9 @@
 (add-load-path "./" :relative :after)
 
 (load "pp.scm")
-(use raw :prefix raw)
-(use simp :prefix simp)
-(use abs :prefix abs)
+(use raw :prefix raw:)
+(use simp :prefix simp:)
+(use abs :prefix abs:)
 
 (define tests
   '(

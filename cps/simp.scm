@@ -1,5 +1,6 @@
 (define-module simp
-  (use util.match :only (match)))
+  (use util.match :only (match))
+  (export cps))
 
 (select-module simp)
 

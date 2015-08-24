@@ -1,4 +1,5 @@
 (define-module abs
+  (export cps)
   (define (cpsk expr k)
     (match expr
       [(? (lambda (v) (or (symbol? v) (number? v))) v)
