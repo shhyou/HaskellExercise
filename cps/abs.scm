@@ -11,13 +11,16 @@
         (let ([old-cnt cnt])
           (set! cnt (+ cnt 1))
           ($ string->symbol $ string-append s $ number->string old-cnt)))))
+  ; Note: `k` should never duplicate the term it received
+  ; since the term is not gaurenteed to be a value in the
+  ; presence of `shift` and `reset`
   (define (cpsk expr k)
     (match expr
       [(? (lambda (v) (or (symbol? v) (number? v))) v)
        (k v)]
       [('lambda (x) e)
        (let ([k1 (fresh "k")])
-         `(lambda (,x ,k1) ,(cpsk e (lambda (v) `(,k1 ,v)))))]
+         (k `(lambda (,x ,k1) ,(cpsk e (lambda (v) `(,k1 ,v))))))]
       [('callcc f)
        (cpsk f (lambda (f^)
                  (let* ([k^ (fresh "k")]
@@ -27,12 +30,11 @@
                    `(let ([,k^ (lambda (,tmp) ,(k tmp))])
                       (,f^ (lambda (,v ,k1) (,k^ ,v)) ,k^)))))]
       [('reset e)
-       (let ([tmp (fresh "%")])
-         `((lambda (,tmp) ,(k tmp)) ,(cpsk e (lambda (x) x))))]
+       (k (cpsk e (lambda (x) x)))]
       [('shift f)
-       (let ([k1 (fresh "k")]
-             [v (fresh "v")]
-             [x (fresh "x")])
+       (let* ([k1 (fresh "k")]
+              [v (fresh "v")]
+              [x (fresh "x")])
          (cpsk f (lambda (f^)
                    `(,f^ (lambda (,v ,k1) (,k1 ,(k v))) (lambda (,x) ,x)))))]
       [('if e1 e2 e3)

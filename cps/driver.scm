@@ -36,6 +36,14 @@
                     (shift (lambda (f1)
                              (lambda (f2)
                                (f2 (f1 3)))))))))
+    (reset (reset 0))
+    (reset
+     (add1 (reset
+            (shift (lambda (f)
+                     (f (f 8)))))))
+    (reset
+     (add1 (shift (lambda (f)
+                    (f (f 8))))))
     ))
 
 (define (test-all test-proc)

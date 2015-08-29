@@ -28,6 +28,9 @@
     (cond [(eq? k 'id) #t]
           [(symbol? k) #t]
           [else #f]))
+  ; Note: `k` should never duplicate the term it received
+  ; since the term is not gaurenteed to be a value in the
+  ; presence of `shift` and `reset`
   (define (cpsk expr k)
     (match expr
       [(? (lambda (v) (or (symbol? v) (number? v))) v)
@@ -48,7 +51,7 @@
                            `(let ([,k^ ,(cont-sym k)])
                               ,(build-cont k^))))))))]
       [('reset e)
-       `(,(cont-sym k) ,(cpsk e 'id))]
+       (cont-ap k (cpsk e 'id))]
       [('shift f)
        (let* ([k1 (fresh "k")]
               [v (fresh "v")]
