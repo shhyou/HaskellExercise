@@ -1,6 +1,7 @@
 ;; language:
 ;;   e  ::=  n | x | (e1 e2) | (lambda (x) e)
-;;       |   (if e1 e2 e3) | (callcc e)
+;;       |   (if e1 e2 e3)
+;;       |   (callcc e) | (reset e) | (shift f)
 
 (add-load-path "./" :relative :after)
 
@@ -8,6 +9,7 @@
 (use raw :prefix raw:)
 (use simp :prefix simp:)
 (use abs :prefix abs:)
+(use etaview :prefix etaview:)
 
 (define tests
   '(

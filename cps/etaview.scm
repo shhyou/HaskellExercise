@@ -1,0 +1,35 @@
+(define-module etaview
+  (use util.match :only (match))
+  (export observe))
+
+(select-module etaview)
+
+(define (observe expr)
+  (match expr
+    [(? (lambda (v) (or (symbol? v) (number? v))) v)
+     v]
+    [('lambda (x) (e1 x^))
+     (if (eq? x x^)
+         (observe e1)
+         `(lambda (,x) (,(observe e1) ,x^)))]
+    [('lambda (x) e)
+     `(lambda (,x) ,(observe e))]
+    [('if e1 e2 e3)
+     `(if ,(observe e1) ,(observe e2) ,(observe e3))]
+    [('callcc f)
+     `(callcc ,(observe f))]
+    [('reset e)
+     `(reset ,(observe e))]
+    [('shift f)
+     `(shift ,(observe f))]
+    [(e1 e2)
+     `(,(observe e1) ,(observe e2))]
+
+    ; forms introduced by CPS transformation
+    [('let ([x e1]) e2)
+     `(let ([,x ,(observe e1)])
+        ,(observe e2))]
+    [('lambda (x k) e)
+     `(lambda (,x ,k) ,(observe e))]
+    [(e1 e2 k)
+     `(,(observe e1) ,(observe e2) ,(observe k))]))
