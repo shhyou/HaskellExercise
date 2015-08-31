@@ -1,3 +1,9 @@
+(define-module pp
+  (export generic-write)
+  (export pretty-print))
+
+(select-module pp)
+
 ; File: "pp.scm"   (c) 1991, Marc Feeley
 
 ; 'generic-write' is a procedure that transforms a Scheme data value (or

@@ -5,7 +5,7 @@
 
 (add-load-path "./" :relative :after)
 
-(load "pp.scm")
+(use pp :only (pretty-print))
 (use raw :prefix raw:)
 (use simp :prefix simp:)
 (use abs :prefix abs:)
