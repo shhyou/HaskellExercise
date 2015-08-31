@@ -37,14 +37,19 @@
        (cont-ap k v)]
       [('lambda (x) e)
        (let ([k1 (fresh "k")])
-         (cont-ap k `(lambda (,x ,k1) ,(cpsk e k1))))]
+         (cont-ap k `(lambda (,x)
+                       (lambda (,k1)
+                         ,(cpsk e k1)))))]
       [('callcc f)
        (let* ([k1 (fresh "k")]
               [v (fresh "v")])
          (cpsk f (lambda (f^)
                    (let ([build-cont
                           (lambda (k^)
-                            `(,f^ (lambda (,v ,k1) ,(cont-ap k^ v)) ,(cont-sym k^)))])
+                            `((,f^ (lambda (,v)
+                                     (lambda (,k1)
+                                       ,(cont-ap k^ v))))
+                              ,(cont-sym k^)))])
                      (if (cont-trivial? k)
                          (build-cont k)
                          (let ([k^ (fresh "k")])
@@ -57,7 +62,10 @@
               [v (fresh "v")]
               [x (fresh "x")])
          (cpsk f (lambda (f^)
-                   `(,f^ (lambda (,v ,k1) (,k1 ,(cont-ap k v))) (lambda (,x) ,x)))))]
+                   `((,f^ (lambda (,v)
+                            (lambda (,k1)
+                              (,k1 ,(cont-ap k v)))))
+                     (lambda (,x) ,x)))))]
       [('if e1 e2 e3)
        (if (cont-trivial? k)
            (cpsk e1 (lambda (v)
@@ -69,5 +77,5 @@
       [(e1 e2)
        (cpsk e1 (lambda (f)
                   (cpsk e2 (lambda (v)
-                             `(,f ,v ,(cont-sym k))))))]))
+                             `((,f ,v) ,(cont-sym k))))))]))
   (cpsk expr 'id))

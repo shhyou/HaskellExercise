@@ -20,7 +20,9 @@
        (k v)]
       [('lambda (x) e)
        (let ([k1 (fresh "k")])
-         (k `(lambda (,x ,k1) ,(cpsk e (lambda (v) `(,k1 ,v))))))]
+         (k `(lambda (,x)
+               (lambda (,k1)
+                 ,(cpsk e (lambda (v) `(,k1 ,v)))))))]
       [('callcc f)
        (cpsk f (lambda (f^)
                  (let* ([k^ (fresh "k")]
@@ -28,7 +30,10 @@
                         [tmp (fresh "%")]
                         [v (fresh "%")])
                    `(let ([,k^ (lambda (,tmp) ,(k tmp))])
-                      (,f^ (lambda (,v ,k1) (,k^ ,v)) ,k^)))))]
+                      ((,f^ (lambda (,v)
+                              (lambda (,k1)
+                                (,k^ ,v))))
+                       ,k^)))))]
       [('reset e)
        (k (cpsk e (lambda (x) x)))]
       [('shift f)
@@ -36,7 +41,10 @@
               [v (fresh "v")]
               [x (fresh "x")])
          (cpsk f (lambda (f^)
-                   `(,f^ (lambda (,v ,k1) (,k1 ,(k v))) (lambda (,x) ,x)))))]
+                   `((,f^ (lambda (,v)
+                            (lambda (,k1)
+                              (,k1 ,(k v)))))
+                     (lambda (,x) ,x)))))]
       [('if e1 e2 e3)
        (let* ([k1 (fresh "k")]
               [v (fresh "%")])
@@ -49,5 +57,5 @@
        (let ([tmp (fresh "%")])
          (cpsk e1 (lambda (f)
                     (cpsk e2 (lambda (v)
-                               `(,f ,v (lambda (,tmp) ,(k tmp))))))))]))
+                               `((,f ,v) (lambda (,tmp) ,(k tmp))))))))]))
   (cpsk expr (lambda (v) v)))
