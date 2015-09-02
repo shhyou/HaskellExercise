@@ -8,10 +8,10 @@
   (match expr
     [(? (lambda (v) (or (symbol? v) (number? v))) v)
      v]
-    [('lambda (x) (e1 x^))
-     (if (eq? x x^)
+    [('lambda (x) (e1 e2))
+     (if (eq? x e2)
          (observe e1)
-         `(lambda (,x) (,(observe e1) ,x^)))]
+         `(lambda (,x) (,(observe e1) ,(observe e2))))]
     [('lambda (x) e)
      `(lambda (,x) ,(observe e))]
     [('if e1 e2 e3)
