@@ -23,13 +23,4 @@
     [('shift f)
      `(shift ,(observe f))]
     [(e1 e2)
-     `(,(observe e1) ,(observe e2))]
-
-    ; forms introduced by CPS transformation
-    [('let ([x e1]) e2)
-     `(let ([,x ,(observe e1)])
-        ,(observe e2))]
-    [('lambda (x k) e)
-     `(lambda (,x ,k) ,(observe e))]
-    [(e1 e2 k)
-     `(,(observe e1) ,(observe e2) ,(observe k))]))
+     `(,(observe e1) ,(observe e2))]))
