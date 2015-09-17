@@ -91,3 +91,38 @@ interpL2 (Add1 e)   cxt k = interpL2 e cxt (Add12 k)
 interpL2 (Lam e)    cxt k = applyL2 k (Clos2 cxt e)
 interpL2 (Var m)    cxt k = applyThunk2 (cxt!!m) k
 interpL2 (Ap e1 e2) cxt k = interpL2 e1 cxt (Apply2 cxt e2 k)
+
+{- Defunctionalized CPS Call-by-Need Interpreter -}
+data Value3 = N3 Int
+            | Clos3 Env3 Expr
+
+instance Show Value3 where
+  show (N3 n) = "(N3 " ++ show n ++ ")"
+  show (Clos3 _ _) = "(closure)"
+
+data Cont3 = Id3
+           | Apply3 Env3 Expr Cont3
+           | Add13 Cont3
+           | Imm3 Int Cont3
+
+data Thunk3 = Thunk3 Env3 Expr
+
+type Env3 = [Thunk3]
+
+applyL3 :: Cont3 -> (Value3 -> Value3)
+applyL3 Id3               val             = val
+applyL3 (Add13 k)         (N3 i)          = N3 (i+1)
+applyL3 (Add13 _)         _               = error $ "applyL3: type mismatch"
+applyL3 (Apply3 cxt e2 k) (Clos3 cxt' e') = interpL3 e' (Thunk3 cxt e2:cxt') k
+applyL3 (Apply3 _ _ _)    _               = error $ "applyL3: type mismatch"
+applyL3 (Imm3 n k)        _               = applyL3 k (N3 n)
+
+applyThunk3 :: Thunk3 -> Cont3 -> Value3
+applyThunk3 (Thunk3 cxt e2) k = interpL3 e2 cxt k
+
+interpL3 :: Expr -> Env3 -> Cont3 -> Value3
+interpL3 (Int n)    cxt k = applyL3 (Imm3 n k) undefined
+interpL3 (Add1 e)   cxt k = interpL3 e cxt (Add13 k)
+interpL3 (Lam e)    cxt k = applyL3 k (Clos3 cxt e)
+interpL3 (Var m)    cxt k = applyThunk3 (cxt!!m) k
+interpL3 (Ap e1 e2) cxt k = interpL3 e1 cxt (Apply3 cxt e2 k)
