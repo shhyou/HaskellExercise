@@ -7,6 +7,15 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Except
 
+typ1 :: Term
+typ1 = Pi "A" U (Pi "x" (Var "A") (Var "A"))
+
+expr1 :: Term
+expr1 = Lam "A" (Lam "x" (Var "x"))
+
+testCheck :: Term -> Term -> IO (Either Err ())
+testCheck e t = evalStateT (runExceptT (check emptyCxt e t)) 100
+
 type Err = String
 type Name = String
 
@@ -26,15 +35,58 @@ data Term = Var Name              -- infer
 
 type Context = [(Name, Term)]
 
+emptyCxt :: Context
+emptyCxt = []
+
 extendCxt :: Name -> Term -> Context -> Context
 extendCxt x t = ((x, t) :)
 
 lookupCxt :: Name -> Context -> Term
 lookupCxt = (maybe (error "Unbound variable") id .) . lookup
 
-check :: (Applicative m, MonadState Int m, MonadError Err m)
+check :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
       => Context -> Term -> Term -> m ()
-check cxt e t = undefined
+check cxt (Lam x e) (Pi t a b) = do -- The case (\x. e) : Pi_[t : a] b
+  x' <- fresh x
+  e' <- subst e (Var x') x -- e [ x' / x ]
+  b' <- subst b (Var x') t -- b [ x' / t ]
+  check cxt a U
+  -- Shouldn't affect type checking; merely to speed up type checking
+  -- Only do the evaluation had it type checked
+  -- a' <- eval a
+  b'' <- eval b'
+  check (extendCxt x' a cxt) e' b''
+check cxt (Pi t a b) U = do
+  check cxt a U
+  check (extendCxt t a cxt) b U
+check cxt U U = return ()
+check cxt e t = do
+  -- Any way to avoid this awkward check without duplicating the code?
+  case e of
+    Var _ -> return ()
+    Lam _ _ -> return ()
+    _ -> throwError $ "check: missing case: '" ++ show e ++ "' : '" ++ show t ++ "'"
+  t2 <- infer cxt e
+  t' <- eval t
+  t2' <- eval t2
+  if equal t' t2'
+    then return ()
+    else throwError $ "check: type mismatch: " ++ show e ++ ": " ++ show t ++ " v.s. " ++ show t'
+
+infer :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
+      => Context -> Term -> m Term
+infer cxt (Var x) = do
+  liftIO $ putStrLn ("Looking up " ++ x)
+  return $ lookupCxt x cxt
+infer cxt (Ap e1 e2) = do -- elimination of Pi_[t : a] b
+  t <- infer cxt e1
+  t' <- eval t
+  case t' of
+    Pi x a b -> do
+      check cxt e2 a
+      subst b e2 x
+    _ -> throwError $ "infer: application of non-function '" ++ show e1 ++ "': '" ++ show t ++ "'"
+infer cxt e = throwError $ "infer: missing case: '" ++ show e ++ "'"
 
 eval :: (Applicative m, MonadState Int m, MonadError Err m) => Term -> m Term
 eval (Ap e1 e2) = do
@@ -85,11 +137,11 @@ substAux cxt (Ap e e') e2 x    = Ap <$> substAux cxt e e2 x <*> substAux cxt e' 
 substAux cxt e1@(Lam y e) e2 x
   | x == y                     = pure e1
   | otherwise                  = do
-      y' <- fresh "x"
+      y' <- fresh y
       Lam y' <$> substAux (\z -> if z == y then y' else cxt z) e e2 x
 substAux cxt (Pi y e e') e2 x
   | x == y                     = Pi y <$> substAux cxt e e2 x <*> pure e'
   | otherwise                  = do
-      y' <- fresh "T"
+      y' <- fresh y
       Pi y' <$> substAux cxt e e2 x <*> substAux (\z -> if z == y then y' else cxt z) e' e2 x
 substAux cxt U e2 x            = pure U
