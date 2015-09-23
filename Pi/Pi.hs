@@ -1,6 +1,8 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveGeneric, FlexibleContexts #-}
 
 module Pi where
+
+import Text.PrettyPrint.GenericPretty
 
 import Control.Applicative ((<$>), Applicative(..))
 import Control.Monad
@@ -10,6 +12,7 @@ import Control.Monad.Except
 polyidCxt :: Term -> Term
 polyidCxt = Let "polyid" typ1 expr1
 
+-- To pretty print: pp EXPR
 expr1, typ1, expr2, typ2, expr3, typ3 :: Term
 
 expr1 = Lam "A" (Lam "x" (Var "x"))
@@ -40,7 +43,10 @@ data Term = Var Name              -- infer
 
           | U
 
-          deriving (Show, Eq)
+          deriving (Show, Eq, Generic)
+
+-- Automatic derived instance (from Generic)
+instance Out Term
 
 type Context = [(Name, Term)]
 
