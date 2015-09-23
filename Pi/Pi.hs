@@ -53,7 +53,11 @@ lookupCxt = (maybe (error "Unbound variable") id .) . lookup
 
 check :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
       => Context -> Term -> Term -> m ()
-check cxt (Lam x e) (Pi t a b) = do -- The case (\x. e) : Pi_[t : a] b
+check cxt e t = check' cxt e =<< eval t
+
+check' :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
+      => Context -> Term -> Term -> m ()
+check' cxt (Lam x e) (Pi t a b) = do -- The case (\x. e) : Pi_[t : a] b
   x' <- fresh x
   e' <- subst e (Var x') x -- e [ x' / x ]
   b' <- subst b (Var x') t -- b [ x' / t ]
@@ -61,13 +65,12 @@ check cxt (Lam x e) (Pi t a b) = do -- The case (\x. e) : Pi_[t : a] b
   -- Shouldn't affect type checking; merely to speed up type checking
   -- Only do the evaluation had it type checked
   -- a' <- eval a
-  b'' <- eval b'
-  check (extendCxt x' a cxt) e' b''
-check cxt (Pi t a b) U = do
+  check (extendCxt x' a cxt) e' b'
+check' cxt (Pi t a b) U = do
   check cxt a U
   check (extendCxt t a cxt) b U
-check cxt U U = return ()
-check cxt e t = do
+check' cxt U U = return ()
+check' cxt e t = do
   -- Any way to avoid this awkward check without duplicating the code?
   case e of
     Var _ -> return ()
@@ -75,9 +78,8 @@ check cxt e t = do
     Let _ _ _ _ -> return ()
     _ -> throwError $ "check: missing case: '" ++ show e ++ "' : '" ++ show t ++ "'"
   t2 <- infer cxt e
-  t' <- eval t
-  t2' <- eval t2
-  if equal t' t2'
+  equ <- equal <$> eval t <*> eval t2
+  if equ
     then return ()
     else throwError $ "check: type mismatch: " ++ show e ++ ": " ++ show t ++ " v.s. " ++ show t2
 
@@ -85,18 +87,15 @@ infer :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
       => Context -> Term -> m Term
 infer cxt (Var x) = return $ lookupCxt x cxt
 infer cxt (Ap e1 e2) = do -- elimination of Pi_[t : a] b
-  t <- infer cxt e1
-  t' <- eval t
-  case t' of
+  t <- eval =<< infer cxt e1
+  case t of
     Pi x a b -> do
-      a' <- eval a
-      check cxt e2 a'
+      check cxt e2 a
       subst b e2 x
     _ -> throwError $ "infer: application of non-function '" ++ show e1 ++ "': '" ++ show t ++ "'"
 infer cxt (Let x t e1 e2) = do
   check cxt t U
-  t' <- eval t
-  check cxt e1 t'
+  check cxt e1 t
   infer (extendCxt x e1 cxt) e2
 infer cxt e = throwError $ "infer: missing case: '" ++ show e ++ "'"
 
