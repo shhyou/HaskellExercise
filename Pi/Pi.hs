@@ -13,6 +13,12 @@ typ1 = Pi "A" U (Pi "x" (Var "A") (Var "A"))
 expr1 :: Term
 expr1 = Lam "A" (Lam "x" (Var "x"))
 
+polyidCxt :: Term -> Term
+polyidCxt = Let "polyid" typ1 expr1
+
+expr2 :: Term
+expr2 = polyidCxt $ (Var "polyid") `Ap` U `Ap` U
+
 testCheck :: Term -> Term -> IO (Either Err ())
 testCheck e t = evalStateT (runExceptT (check emptyCxt e t)) 100
 
@@ -24,6 +30,7 @@ append = (++)
 
 data Term = Var Name              -- infer
           | Ap Term Term
+          | Let Name Term Term Term -- let (x : t) = e1 in e2
 
           | Lam Name Term         -- check
 
@@ -65,27 +72,32 @@ check cxt e t = do
   case e of
     Var _ -> return ()
     Lam _ _ -> return ()
+    Let _ _ _ _ -> return ()
     _ -> throwError $ "check: missing case: '" ++ show e ++ "' : '" ++ show t ++ "'"
   t2 <- infer cxt e
   t' <- eval t
   t2' <- eval t2
   if equal t' t2'
     then return ()
-    else throwError $ "check: type mismatch: " ++ show e ++ ": " ++ show t ++ " v.s. " ++ show t'
+    else throwError $ "check: type mismatch: " ++ show e ++ ": " ++ show t ++ " v.s. " ++ show t2
 
 infer :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
       => Context -> Term -> m Term
-infer cxt (Var x) = do
-  liftIO $ putStrLn ("Looking up " ++ x)
-  return $ lookupCxt x cxt
+infer cxt (Var x) = return $ lookupCxt x cxt
 infer cxt (Ap e1 e2) = do -- elimination of Pi_[t : a] b
   t <- infer cxt e1
   t' <- eval t
   case t' of
     Pi x a b -> do
-      check cxt e2 a
+      a' <- eval a
+      check cxt e2 a'
       subst b e2 x
     _ -> throwError $ "infer: application of non-function '" ++ show e1 ++ "': '" ++ show t ++ "'"
+infer cxt (Let x t e1 e2) = do
+  check cxt t U
+  t' <- eval t
+  check cxt e1 t'
+  infer (extendCxt x e1 cxt) e2
 infer cxt e = throwError $ "infer: missing case: '" ++ show e ++ "'"
 
 eval :: (Applicative m, MonadState Int m, MonadError Err m) => Term -> m Term
@@ -95,6 +107,7 @@ eval (Ap e1 e2) = do
   case e1' of
     Lam x e -> subst e e2' x
     _ -> return $ Ap e1' e2'
+eval (Let x t e1 e2) = subst e2 e1 x
 eval e@(Var x) = return e
 eval (Lam x e) = Lam x <$> eval e
 eval (Pi x e1 e2) = Pi x <$> eval e1 <*> eval e2
