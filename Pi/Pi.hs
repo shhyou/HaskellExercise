@@ -53,7 +53,7 @@ lookupCxt = (maybe (error "Unbound variable") id .) . lookup
 
 check :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
       => Context -> Term -> Term -> m ()
-check cxt e t = check' cxt e =<< eval cxt t
+check cxt e t = check' cxt e =<< eval t
 
 check' :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
       => Context -> Term -> Term -> m ()
@@ -64,7 +64,7 @@ check' cxt (Lam x e) (Pi t a b) = do -- The case (\x. e) : Pi_[t : a] b
   check cxt a U
   -- Shouldn't affect type checking; merely to speed up type checking
   -- Only do the evaluation had it type checked
-  -- a' <- eval cxt a
+  -- a' <- eval a
   check (extendCxt x' a cxt) e' b'
 check' cxt (Pi t a b) U = do
   check cxt a U
@@ -78,7 +78,7 @@ check' cxt e t = do
     Let _ _ _ _ -> return ()
     _ -> throwError $ "check: missing case: '" ++ show e ++ "' : '" ++ show t ++ "'"
   t2 <- infer cxt e
-  equ <- equal <$> eval cxt t <*> eval cxt t2
+  equ <- equal <$> eval t <*> eval t2
   if equ
     then return ()
     else throwError $ "check: type mismatch: " ++ show e ++ ": " ++ show t ++ " v.s. " ++ show t2
@@ -87,7 +87,7 @@ infer :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
       => Context -> Term -> m Term
 infer cxt (Var x) = return $ lookupCxt x cxt
 infer cxt (Ap e1 e2) = do -- elimination of Pi_[t : a] b
-  t <- eval cxt =<< infer cxt e1
+  t <- eval =<< infer cxt e1
   case t of
     Pi x a b -> do
       check cxt e2 a
@@ -96,25 +96,22 @@ infer cxt (Ap e1 e2) = do -- elimination of Pi_[t : a] b
 infer cxt (Let x t e1 e2) = do
   check cxt t U
   check cxt e1 t
-  infer (extendCxt x e1 cxt) e2
+  infer (extendCxt x t cxt) e2
 infer cxt e = throwError $ "infer: missing case: '" ++ show e ++ "'"
 
 eval :: (Applicative m, MonadState Int m, MonadError Err m)
-     => Context -> Term -> m Term
-eval cxt (Ap e1 e2) = do
-  e1' <- eval cxt e1
-  e2' <- eval cxt e2
+     => Term -> m Term
+eval (Ap e1 e2) = do
+  e1' <- eval e1
+  e2' <- eval e2
   case e1' of
     Lam x e -> subst e e2' x
     _ -> return $ Ap e1' e2'
-eval cxt (Let x t e1 e2) = subst e2 e1 x
-eval cxt (Var x) =
-  case lookup x cxt of
-    Just e -> eval cxt e
-    Nothing -> return (Var x)
-eval cxt (Lam x e) = Lam x <$> eval cxt e
-eval cxt (Pi x e1 e2) = Pi x <$> eval cxt e1 <*> eval cxt e2
-eval cxt U = return U
+eval (Let x t e1 e2) = subst e2 e1 x
+eval e@(Var x) = return e
+eval (Lam x e) = Lam x <$> eval e
+eval (Pi x e1 e2) = Pi x <$> eval e1 <*> eval e2
+eval U = return U
 
 {- mechanical operation on terms: equality test, substitution -}
 
