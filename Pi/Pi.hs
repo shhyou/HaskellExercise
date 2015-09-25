@@ -18,11 +18,15 @@ expr1, typ1, expr2, typ2, expr3, typ3 :: Term
 expr1 = Lam "A" (Lam "x" (Var "x"))
 typ1 = Pi "A" U (Pi "x" (Var "A") (Var "A"))
 
-expr2 = polyidCxt $ (Var "polyid") `Ap` U `Ap` U
+expr2 = polyidCxt $ Var "polyid" `Ap` U `Ap` U
 typ2 = U
 
-expr3 = polyidCxt $ (Var "polyid") `Ap` typ1 `Ap` (Var "polyid")
+expr3 = polyidCxt $ Var "polyid" `Ap` typ1 `Ap` Var "polyid"
 typ3 = typ1
+
+expr4 = Lam "id" $ Var "id" `Ap` Pi "a" U (Pi "_" (Var "a") (Var "a")) `Ap` Var "id"
+typ4 = Pi "x" (Pi "A" U (Pi "y" (Var "A") (Var "A")))
+          (Pi "A" U (Pi "y" (Var "A") (Var "A")))
 
 testCheck :: Term -> Term -> IO (Either Err ())
 testCheck e t = evalStateT (runExceptT (check emptyCxt e t)) 100
