@@ -86,7 +86,7 @@ check' cxt e t = do
   -- Any way to avoid this awkward check without duplicating the code?
   case e of
     Var _ -> return ()
-    Lam _ _ -> return ()
+    Ap _ _ -> return ()
     Let _ _ _ _ -> return ()
     _ -> throwError $ "check: missing case: '" ++ show e ++ "' : '" ++ show t ++ "'"
   t2 <- infer cxt e
