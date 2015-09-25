@@ -2,6 +2,8 @@
 
 module Pi where
 
+import Data.Char (isAlpha)
+
 import Text.PrettyPrint.GenericPretty
 
 import Control.Applicative ((<$>), Applicative(..))
@@ -30,6 +32,8 @@ typ4 = Pi "x" (Pi "A" U (Pi "y" (Var "A") (Var "A")))
 
 testCheck :: Term -> Term -> IO (Either Err ())
 testCheck e t = evalStateT (runExceptT (check emptyCxt e t)) 100
+
+testAll = pp =<< mapM (uncurry testCheck) [(expr1,typ1),(expr2,typ2),(expr3,typ3),(expr4,typ4)]
 
 type Err = String
 type Name = String
@@ -68,7 +72,7 @@ check :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
 check cxt e t = check' cxt e =<< eval t
 
 check' :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
-      => Context -> Term -> Term -> m ()
+       => Context -> Term -> Term -> m ()
 check' cxt (Lam x e) (Pi t a b) = do -- The case (\x. e) : Pi_[t : a] b
   x' <- fresh x
   e' <- subst e (Var x') x -- e [ x' / x ]
@@ -91,9 +95,7 @@ check' cxt e t = do
     _ -> throwError $ "check: missing case: '" ++ show e ++ "' : '" ++ show t ++ "'"
   t2 <- infer cxt e
   equ <- equal <$> eval t <*> eval t2
-  if equ
-    then return ()
-    else throwError $ "check: type mismatch: " ++ show e ++ ": " ++ show t ++ " v.s. " ++ show t2
+  unless equ $ throwError $ "check: type mismatch: " ++ show e ++ ": " ++ show t ++ " v.s. " ++ show t2
 
 infer :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
       => Context -> Term -> m Term
@@ -120,7 +122,7 @@ eval (Ap e1 e2) = do
     Lam x e -> subst e e2' x
     _ -> return $ Ap e1' e2'
 eval (Let x t e1 e2) = subst e2 e1 x
-eval e@(Var x) = return e
+eval (Var x) = return (Var x)
 eval (Lam x e) = Lam x <$> eval e
 eval (Pi x e1 e2) = Pi x <$> eval e1 <*> eval e2
 eval U = return U
@@ -149,10 +151,10 @@ subst :: (Applicative m, MonadState Int m) => Term -> Term -> Name -> m Term
 subst = substAux id
 
 fresh :: (MonadState Int m) => Name -> m Name
-fresh prefix = do
+fresh prefixNum = do
   n <- get
   modify (+1)
-  return $ prefix `append` show n
+  return $ takeWhile isAlpha prefixNum `append` show n
 
 substAux :: (Applicative m, MonadState Int m) => (Name -> Name) -> Term -> Term -> Name -> m Term
 substAux cxt (Var y) e2 x
