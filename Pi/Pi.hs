@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, FlexibleContexts #-}
+{-# LANGUAGE DeriveGeneric, FlexibleContexts, TypeOperators #-}
 
 module Pi where
 
@@ -20,13 +20,13 @@ expr1, typ1, expr2, typ2, expr3, typ3 :: Term
 expr1 = Lam "A" (Lam "x" (Var "x"))
 typ1 = Pi "A" U (Pi "x" (Var "A") (Var "A"))
 
-expr2 = polyidCxt $ Var "polyid" `Ap` U `Ap` U
+expr2 = polyidCxt $ Var "polyid" :@ U :@ U
 typ2 = U
 
-expr3 = polyidCxt $ Var "polyid" `Ap` typ1 `Ap` Var "polyid"
+expr3 = polyidCxt $ Var "polyid" :@ typ1 :@ Var "polyid"
 typ3 = typ1
 
-expr4 = Lam "id" $ Var "id" `Ap` Pi "a" U (Pi "_" (Var "a") (Var "a")) `Ap` Var "id"
+expr4 = Lam "id" $ Var "id" :@ Pi "a" U (Pi "_" (Var "a") (Var "a")) :@ Var "id"
 typ4 = Pi "x" (Pi "A" U (Pi "y" (Var "A") (Var "A")))
           (Pi "A" U (Pi "y" (Var "A") (Var "A")))
 
@@ -41,13 +41,17 @@ type Name = String
 append :: Name -> Name -> Name
 append = (++)
 
+infixl 2 :@
+infixr 1 :=>
+
 data Term = Var Name              -- infer
-          | Ap Term Term
+          | Term :@ Term
           | Let Name Term Term Term -- let (x : t) = e1 in e2
 
           | Lam Name Term         -- check
 
           | Pi Name Term Term     -- types
+          | Term :=> Term         -- (Pi _ A B)
 
           | U
 
@@ -73,6 +77,10 @@ check cxt e t = check' cxt e =<< eval t
 
 check' :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
        => Context -> Term -> Term -> m ()
+check' cxt (Lam x e) (a :=> b) = do
+  check cxt a U
+  check cxt b U
+  check (extendCxt x a cxt) e b
 check' cxt (Lam x e) (Pi t a b) = do -- The case (\x. e) : Pi_[t : a] b
   x' <- fresh x
   e' <- subst e (Var x') x -- e [ x' / x ]
@@ -82,6 +90,9 @@ check' cxt (Lam x e) (Pi t a b) = do -- The case (\x. e) : Pi_[t : a] b
   -- Only do the evaluation had it type checked
   -- a' <- eval a
   check (extendCxt x' a cxt) e' b'
+check' cxt (a :=> b) U = do
+  check cxt a U
+  check cxt b U
 check' cxt (Pi t a b) U = do
   check cxt a U
   check (extendCxt t a cxt) b U
@@ -90,7 +101,7 @@ check' cxt e t = do
   -- Any way to avoid this awkward check without duplicating the code?
   case e of
     Var _ -> return ()
-    Ap _ _ -> return ()
+    _ :@ _ -> return ()
     Let _ _ _ _ -> return ()
     _ -> throwError $ "check: missing case: '" ++ show e ++ "' : '" ++ show t ++ "'"
   t2 <- infer cxt e
@@ -100,7 +111,7 @@ check' cxt e t = do
 infer :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
       => Context -> Term -> m Term
 infer cxt (Var x) = return $ lookupCxt x cxt
-infer cxt (Ap e1 e2) = do -- elimination of Pi_[t : a] b
+infer cxt (e1 :@ e2) = do -- elimination of Pi_[t : a] b
   t <- eval =<< infer cxt e1
   case t of
     Pi x a b -> do
@@ -115,15 +126,16 @@ infer cxt e = throwError $ "infer: missing case: '" ++ show e ++ "'"
 
 eval :: (Applicative m, MonadState Int m, MonadError Err m)
      => Term -> m Term
-eval (Ap e1 e2) = do
+eval (e1 :@ e2) = do
   e1' <- eval e1
   e2' <- eval e2
   case e1' of
     Lam x e -> subst e e2' x
-    _ -> return $ Ap e1' e2'
+    _ -> return $ e1' :@ e2'
 eval (Let x t e1 e2) = subst e2 e1 x
 eval (Var x) = return (Var x)
 eval (Lam x e) = Lam x <$> eval e
+eval (e1 :=> e2) = (:=>) <$> eval e1 <*> eval e2
 eval (Pi x e1 e2) = Pi x <$> eval e1 <*> eval e2
 eval U = return U
 
@@ -135,11 +147,13 @@ equal = equalAux 0 Left Left
 equalAux :: Int -> (Name -> Either String Int) -> (Name -> Either String Int)
          -> Term -> Term -> Bool
 equalAux n cxt1 cxt2 (Var x) (Var y) = cxt1 x == cxt2 y
-equalAux n cxt1 cxt2 (Ap e1 e2) (Ap e1' e2') =
+equalAux n cxt1 cxt2 (e1 :@ e2) (e1' :@ e2') =
   equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
 equalAux n cxt1 cxt2 (Lam x e) (Lam x' e') =
   equalAux (n+1) (extend cxt1 x n) (extend cxt2 x' n) e e'
   where extend cxt x n z = if x == z then Right n else cxt z
+equalAux n cxt1 cxt2 (e1 :=> e2) (e1' :=> e2') =
+  equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
 equalAux n cxt1 cxt2 (Pi x e1 e2) (Pi x' e1' e2') =
   equalAux n cxt1 cxt2 e1 e1' && equalAux (n+1) (extend cxt1 x n) (extend cxt2 x' n) e2 e2'
   where extend cxt x n z = if x == z then Right n else cxt z
@@ -160,12 +174,13 @@ substAux :: (Applicative m, MonadState Int m) => (Name -> Name) -> Term -> Term 
 substAux cxt (Var y) e2 x
   | x == y                     = pure e2
   | otherwise                  = pure $ Var (cxt y)
-substAux cxt (Ap e e') e2 x    = Ap <$> substAux cxt e e2 x <*> substAux cxt e' e2 x
+substAux cxt (e :@ e') e2 x    = (:@) <$> substAux cxt e e2 x <*> substAux cxt e' e2 x
 substAux cxt e1@(Lam y e) e2 x
   | x == y                     = pure e1
   | otherwise                  = do
       y' <- fresh y
       Lam y' <$> substAux (\z -> if z == y then y' else cxt z) e e2 x
+substAux cxt (e :=> e') e2 x = (:=>) <$> substAux cxt e e2 x <*> substAux cxt e' e2 x
 substAux cxt (Pi y e e') e2 x
   | x == y                     = Pi y <$> substAux cxt e e2 x <*> pure e'
   | otherwise                  = do
