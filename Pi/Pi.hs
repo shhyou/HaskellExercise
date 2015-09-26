@@ -18,7 +18,7 @@ polyidCxt :: Term -> Term
 polyidCxt = Let "polyid" typ1 expr1
 
 -- To pretty print: pp EXPR
-expr1, typ1, expr2, typ2, expr3, typ3 :: Term
+expr1, typ1, expr2, typ2, expr3, typ3, expr4, typ4, expr5, typ5 :: Term
 
 expr1 = Lam "A" (Lam "x" "x")
 typ1 = Pi "A" U ("A" :=> "A")
@@ -47,7 +47,8 @@ testCheck e t = do
     Right () -> putStrLn "type checked."
     Left e -> putStrLn e
 
-testAll = mapM_ (uncurry testCheck) [(expr1,typ1),(expr2,typ2),(expr3,typ3),(expr4,typ4)]
+testAll = mapM_ (uncurry testCheck)
+            [(expr1,typ1),(expr2,typ2),(expr3,typ3),(expr4,typ4),(expr5,typ5)]
 
 type Err = String
 type Name = String
@@ -195,6 +196,12 @@ substAux cxt (Var y) e2 x
   | x == y                     = pure e2
   | otherwise                  = pure $ Var (cxt y)
 substAux cxt (e :@ e') e2 x    = (:@) <$> substAux cxt e e2 x <*> substAux cxt e' e2 x
+substAux cxt (Let y t e e') e2 x
+  | x == y                     = Let y <$> substAux cxt t e2 x <*> substAux cxt e e2 x <*> pure e'
+  | otherwise                  = do
+      y' <- fresh y
+      Let y' <$> substAux cxt t e2 x <*> substAux cxt e e2 x <*>
+                 substAux (\z -> if z == y then y' else cxt z) e' e2 x
 substAux cxt e1@(Lam y e) e2 x
   | x == y                     = pure e1
   | otherwise                  = do
