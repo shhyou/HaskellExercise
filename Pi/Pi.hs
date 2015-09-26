@@ -32,9 +32,10 @@ typ3 = typ1
 expr4 = Lam "id" $ "id" :@ Pi "a" U ("a" :=> "a") :@ "id"
 typ4 = Pi "A" U ("A" :=> "A")   :=>   Pi "A" U ("A" :=> "A")
 
-expr5 = Lam "x" ("x" :@ U :@ Pi "a" U ("a" :=> "a"))
-typ5 = Pi "x" (Pi "A" U ("A" :=> "A"))
-          ("x" :@ U :@ Pi "t" U ("t" :=> "t"))
+expr5 = polyidCxt $
+        Let "idid" ("polyid" :@ U :@ (U :=> U)) (Lam "x" "x") $
+        U
+typ5 = U
 
 runM :: Monad m => ExceptT Err (StateT Int m) a -> m (Either Err a)
 runM m = evalStateT (runExceptT m) 100
