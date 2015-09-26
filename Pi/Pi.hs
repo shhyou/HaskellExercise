@@ -122,6 +122,9 @@ infer cxt (Var x) = return $ lookupCxt x cxt
 infer cxt (e1 :@ e2) = do -- elimination of Pi_[t : a] b
   t <- eval =<< infer cxt e1
   case t of
+    a :=> b -> do
+      check cxt e2 a
+      return b
     Pi x a b -> do
       check cxt e2 a
       subst b e2 x
