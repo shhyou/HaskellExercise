@@ -21,7 +21,7 @@ polyidCxt = Let "polyid" typ1 expr1
 expr1, typ1, expr2, typ2, expr3, typ3 :: Term
 
 expr1 = Lam "A" (Lam "x" "x")
-typ1 = Pi "A" U (Pi "x" "A" "A")
+typ1 = Pi "A" U ("A" :=> "A")
 
 expr2 = polyidCxt $ "polyid" :@ U :@ U
 typ2 = U
@@ -29,12 +29,14 @@ typ2 = U
 expr3 = polyidCxt $ "polyid" :@ typ1 :@ "polyid"
 typ3 = typ1
 
-expr4 = Lam "id" $ "id" :@ Pi "a" U (Pi "_" "a" "a") :@ "id"
-typ4 = Pi "x" (Pi "A" U (Pi "y" "A" "A"))
-          (Pi "A" U (Pi "y" "A" "A"))
+expr4 = Lam "id" $ "id" :@ Pi "a" U ("a" :=> "a") :@ "id"
+typ4 = Pi "A" U ("A" :=> "A")   :=>   Pi "A" U ("A" :=> "A")
+
+runM :: Monad m => ExceptT Err (StateT Int m) a -> m (Either Err a)
+runM m = evalStateT (runExceptT m) 100
 
 testCheck :: Term -> Term -> IO (Either Err ())
-testCheck e t = evalStateT (runExceptT (check emptyCxt e t)) 100
+testCheck e t = runM (check emptyCxt e t)
 
 testAll = pp =<< mapM (uncurry testCheck) [(expr1,typ1),(expr2,typ2),(expr3,typ3),(expr4,typ4)]
 
