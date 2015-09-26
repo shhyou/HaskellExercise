@@ -1,6 +1,9 @@
-{-# LANGUAGE DeriveGeneric, FlexibleContexts, TypeOperators #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveGeneric, TypeOperators, OverloadedStrings #-}
 
 module Pi where
+
+import qualified GHC.Exts (IsString(..))
 
 import Data.Char (isAlpha)
 
@@ -17,18 +20,18 @@ polyidCxt = Let "polyid" typ1 expr1
 -- To pretty print: pp EXPR
 expr1, typ1, expr2, typ2, expr3, typ3 :: Term
 
-expr1 = Lam "A" (Lam "x" (Var "x"))
-typ1 = Pi "A" U (Pi "x" (Var "A") (Var "A"))
+expr1 = Lam "A" (Lam "x" "x")
+typ1 = Pi "A" U (Pi "x" "A" "A")
 
-expr2 = polyidCxt $ Var "polyid" :@ U :@ U
+expr2 = polyidCxt $ "polyid" :@ U :@ U
 typ2 = U
 
-expr3 = polyidCxt $ Var "polyid" :@ typ1 :@ Var "polyid"
+expr3 = polyidCxt $ "polyid" :@ typ1 :@ "polyid"
 typ3 = typ1
 
-expr4 = Lam "id" $ Var "id" :@ Pi "a" U (Pi "_" (Var "a") (Var "a")) :@ Var "id"
-typ4 = Pi "x" (Pi "A" U (Pi "y" (Var "A") (Var "A")))
-          (Pi "A" U (Pi "y" (Var "A") (Var "A")))
+expr4 = Lam "id" $ "id" :@ Pi "a" U (Pi "_" "a" "a") :@ "id"
+typ4 = Pi "x" (Pi "A" U (Pi "y" "A" "A"))
+          (Pi "A" U (Pi "y" "A" "A"))
 
 testCheck :: Term -> Term -> IO (Either Err ())
 testCheck e t = evalStateT (runExceptT (check emptyCxt e t)) 100
@@ -59,6 +62,9 @@ data Term = Var Name              -- infer
 
 -- Automatic derived instance (from Generic)
 instance Out Term
+
+instance GHC.Exts.IsString Term where
+  fromString = Var
 
 type Context = [(Name, Term)]
 
