@@ -32,13 +32,21 @@ typ3 = typ1
 expr4 = Lam "id" $ "id" :@ Pi "a" U ("a" :=> "a") :@ "id"
 typ4 = Pi "A" U ("A" :=> "A")   :=>   Pi "A" U ("A" :=> "A")
 
+expr5 = Lam "x" ("x" :@ U :@ Pi "a" U ("a" :=> "a"))
+typ5 = Pi "x" (Pi "A" U ("A" :=> "A"))
+          ("x" :@ U :@ Pi "t" U ("t" :=> "t"))
+
 runM :: Monad m => ExceptT Err (StateT Int m) a -> m (Either Err a)
 runM m = evalStateT (runExceptT m) 100
 
-testCheck :: Term -> Term -> IO (Either Err ())
-testCheck e t = runM (check emptyCxt e t)
+testCheck :: Term -> Term -> IO ()
+testCheck e t = do
+  res <- runM (check emptyCxt e t)
+  case res of
+    Right () -> putStrLn "type checked."
+    Left e -> putStrLn e
 
-testAll = pp =<< mapM (uncurry testCheck) [(expr1,typ1),(expr2,typ2),(expr3,typ3),(expr4,typ4)]
+testAll = mapM_ (uncurry testCheck) [(expr1,typ1),(expr2,typ2),(expr3,typ3),(expr4,typ4)]
 
 type Err = String
 type Name = String
