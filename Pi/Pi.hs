@@ -14,8 +14,8 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Except
 
-polyidCxt :: Term -> Term
-polyidCxt = Let "polyid" typ1 expr1
+polyid :: Term
+polyid = expr1 `Anno` typ1
 
 -- To pretty print: pp EXPR
 expr1, typ1, expr2, typ2, expr3, typ3, expr4, typ4, expr5, typ5 :: Term
@@ -23,28 +23,26 @@ expr1, typ1, expr2, typ2, expr3, typ3, expr4, typ4, expr5, typ5 :: Term
 expr1 = Lam "A" (Lam "x" "x")
 typ1 = Pi "A" U ("A" :=> "A")
 
-expr2 = polyidCxt $ "polyid" :@ U :@ U
+expr2 = polyid :@ U :@ U
 typ2 = U
 
-expr3 = polyidCxt $ "polyid" :@ typ1 :@ "polyid"
+expr3 = polyid :@ typ1 :@ polyid
 typ3 = typ1
 
 expr4 = Lam "id" $ "id" :@ Pi "a" U ("a" :=> "a") :@ "id"
 typ4 = Pi "A" U ("A" :=> "A")   :=>   Pi "A" U ("A" :=> "A")
 
-expr5 = polyidCxt $
-        Let "idid" ("polyid" :@ U :@ (U :=> U)) (Lam "x" "x") $
-        U
-typ5 = U
+expr5 = Lam "x" "x" `Anno` polyid :@ U :@ (U :=> U)
+typ5 = U :=> U
 
 runM :: Monad m => ExceptT Err (StateT Int m) a -> m (Either Err a)
 runM m = evalStateT (runExceptT m) 100
 
 testCheck :: Term -> Term -> IO ()
 testCheck e t = do
-  res <- runM (check emptyCxt e t)
+  res <- runM (infer emptyCxt (e `Anno` t))
   case res of
-    Right () -> putStrLn "type checked."
+    Right t -> putStr "type checked: " >> pp t
     Left e -> putStrLn e
 
 testAll = mapM_ (uncurry testCheck)
@@ -58,10 +56,11 @@ append = (++)
 
 infixl 2 :@
 infixr 1 :=>
+infix 0 `Anno`
 
 data Term = Var Name              -- infer
           | Term :@ Term
-          | Let Name Term Term Term -- let (x : t) = e1 in e2
+          | Anno Term Term        -- type annotaiton
 
           | Lam Name Term         -- check
 
@@ -120,7 +119,7 @@ check' cxt e t = do
   case e of
     Var _ -> return ()
     _ :@ _ -> return ()
-    Let _ _ _ _ -> return ()
+    Anno _ _ -> return ()
     _ -> throwError $ "check: missing case: '" ++ show e ++ "' : '" ++ show t ++ "'"
   t2 <- infer cxt e
   equ <- equal <$> eval t <*> eval t2
@@ -139,22 +138,22 @@ infer cxt (e1 :@ e2) = do -- elimination of Pi_[t : a] b
       check cxt e2 a
       subst b e2 x
     _ -> throwError $ "infer: application of non-function '" ++ show e1 ++ "': '" ++ show t ++ "'"
-infer cxt (Let x t e1 e2) = do
+infer cxt (Anno e t) = do
   check cxt t U
-  check cxt e1 t
-  infer (extendCxt x t cxt) e2
+  check cxt e t
+  return t
 infer cxt e = throwError $ "infer: missing case: '" ++ show e ++ "'"
 
 eval :: (Applicative m, MonadState Int m, MonadError Err m)
      => Term -> m Term
+eval (Var x) = return (Var x)
 eval (e1 :@ e2) = do
   e1' <- eval e1
   e2' <- eval e2
   case e1' of
     Lam x e -> subst e e2' x
     _ -> return $ e1' :@ e2'
-eval (Let x t e1 e2) = subst e2 e1 x
-eval (Var x) = return (Var x)
+eval (Anno e t) = eval e
 eval (Lam x e) = Lam x <$> eval e
 eval (e1 :=> e2) = (:=>) <$> eval e1 <*> eval e2
 eval (Pi x e1 e2) = Pi x <$> eval e1 <*> eval e2
@@ -170,11 +169,13 @@ equalAux :: Int -> (Name -> Either String Int) -> (Name -> Either String Int)
 equalAux n cxt1 cxt2 (Var x) (Var y) = cxt1 x == cxt2 y
 equalAux n cxt1 cxt2 (e1 :@ e2) (e1' :@ e2') =
   equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
+equalAux n cxt1 cxt2 (e1 :=> e2) (e1' :=> e2') =
+  equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
+equalAux n cxt1 cxt2 (Anno e t) (Anno e' t') =
+  equalAux n cxt1 cxt2 e e' && equalAux n cxt1 cxt2 t t'
 equalAux n cxt1 cxt2 (Lam x e) (Lam x' e') =
   equalAux (n+1) (extend cxt1 x n) (extend cxt2 x' n) e e'
   where extend cxt x n z = if x == z then Right n else cxt z
-equalAux n cxt1 cxt2 (e1 :=> e2) (e1' :=> e2') =
-  equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
 equalAux n cxt1 cxt2 (Pi x e1 e2) (Pi x' e1' e2') =
   equalAux n cxt1 cxt2 e1 e1' && equalAux (n+1) (extend cxt1 x n) (extend cxt2 x' n) e2 e2'
   where extend cxt x n z = if x == z then Right n else cxt z
@@ -196,18 +197,13 @@ substAux cxt (Var y) e2 x
   | x == y                     = pure e2
   | otherwise                  = pure $ Var (cxt y)
 substAux cxt (e :@ e') e2 x    = (:@) <$> substAux cxt e e2 x <*> substAux cxt e' e2 x
-substAux cxt (Let y t e e') e2 x
-  | x == y                     = Let y <$> substAux cxt t e2 x <*> substAux cxt e e2 x <*> pure e'
-  | otherwise                  = do
-      y' <- fresh y
-      Let y' <$> substAux cxt t e2 x <*> substAux cxt e e2 x <*>
-                 substAux (\z -> if z == y then y' else cxt z) e' e2 x
+substAux cxt (Anno e t) e2 x   = Anno <$> substAux cxt e e2 x <*> substAux cxt t e2 x
 substAux cxt e1@(Lam y e) e2 x
   | x == y                     = pure e1
   | otherwise                  = do
       y' <- fresh y
       Lam y' <$> substAux (\z -> if z == y then y' else cxt z) e e2 x
-substAux cxt (e :=> e') e2 x = (:=>) <$> substAux cxt e e2 x <*> substAux cxt e' e2 x
+substAux cxt (e :=> e') e2 x   = (:=>) <$> substAux cxt e e2 x <*> substAux cxt e' e2 x
 substAux cxt (Pi y e e') e2 x
   | x == y                     = Pi y <$> substAux cxt e e2 x <*> pure e'
   | otherwise                  = do
