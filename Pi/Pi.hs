@@ -57,6 +57,8 @@ append = (++)
 infixl 2 :@
 infixr 1 :=>
 infix 0 `Anno`
+infixl 4 :*:
+infixl 3 :+:
 
 data Term = Var Name
           | Term :@ Term
@@ -66,6 +68,22 @@ data Term = Var Name
           | Term :=> Term         -- (Pi _ A B)
           | Pi Name Term Term     -- types
           | U
+
+          | Top
+          | Unit
+
+          | Bottom
+          | Absurd Term
+
+          | Term :*: Term
+          | Pair Term Term
+          | Fst Term
+          | Snd Term
+
+          | Term :+: Term
+          | Lef Term
+          | Righ Term
+          | Case Term Term Term
 
           deriving (Show, Eq, Generic)
 
@@ -173,28 +191,34 @@ equalAux :: Int -> (Name -> Either String Int) -> (Name -> Either String Int)
 equalAux n cxt1 cxt2 (Var x) (Var y) = cxt1 x == cxt2 y
 equalAux n cxt1 cxt2 (e1 :@ e2) (e1' :@ e2') =
   equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
-equalAux n cxt1 cxt2 (e1 :=> e2) (e1' :=> e2') =
-  equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
 equalAux n cxt1 cxt2 (Anno e t) (Anno e' t') =
   equalAux n cxt1 cxt2 e e' && equalAux n cxt1 cxt2 t t'
 equalAux n cxt1 cxt2 (Lam x e) (Lam x' e') =
   equalAux (n+1) (extend cxt1 x n) (extend cxt2 x' n) e e'
   where extend cxt x n z = if x == z then Right n else cxt z
+equalAux n cxt1 cxt2 (e1 :=> e2) (e1' :=> e2') =
+  equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
 equalAux n cxt1 cxt2 (Pi x e1 e2) (Pi x' e1' e2') =
   equalAux n cxt1 cxt2 e1 e1' && equalAux (n+1) (extend cxt1 x n) (extend cxt2 x' n) e2 e2'
   where extend cxt x n z = if x == z then Right n else cxt z
 equalAux n cxt1 cxt2 U U = True
+equalAux n cxt1 cxt2 Top Top = True
+equalAux n cxt1 cxt2 Unit Unit = True
+equalAux n cxt1 cxt2 Bottom Bottom = True
+equalAux n cxt1 cxt2 (Absurd e) (Absurd e') = equalAux n cxt1 cxt2 e e'
+equalAux n cxt1 cxt2 (e1 :*: e2) (e1' :*: e2') = equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
+equalAux n cxt1 cxt2 (Pair e1 e2) (Pair e1' e2') = equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
+equalAux n cxt1 cxt2 (Fst e) (Fst e') = equalAux n cxt1 cxt2 e e'
+equalAux n cxt1 cxt2 (Snd e) (Snd e') = equalAux n cxt1 cxt2 e e'
+equalAux n cxt1 cxt2 (e1 :+: e2) (e1' :+: e2') = equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
+equalAux n cxt1 cxt2 (Lef e) (Lef e') = equalAux n cxt1 cxt2 e e'
+equalAux n cxt1 cxt2 (Righ e) (Righ e') = equalAux n cxt1 cxt2 e e'
+equalAux n cxt1 cxt2 (Case e1 e2 e3) (Case e1' e2' e3') = equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2' && equalAux n cxt1 cxt2 e3 e3'
 equalAux n cxt1 cxt2 e1 e2 = False
 
 -- `e1 [ e2 / x ]` is written as `subst e1 e2 x`
 subst :: (Applicative m, MonadState Int m) => Term -> Term -> Name -> m Term
 subst = substAux id
-
-fresh :: (MonadState Int m) => Name -> m Name
-fresh prefixNum = do
-  n <- get
-  modify (+1)
-  return $ takeWhile isAlpha prefixNum `append` show n
 
 substAux :: (Applicative m, MonadState Int m) => (Name -> Name) -> Term -> Term -> Name -> m Term
 substAux cxt (Var y) e2 x
@@ -214,3 +238,21 @@ substAux cxt (Pi y e e') e2 x
       y' <- fresh y
       Pi y' <$> substAux cxt e e2 x <*> substAux (\z -> if z == y then y' else cxt z) e' e2 x
 substAux cxt U e2 x            = pure U
+substAux cxt Top e2 x          = pure Top
+substAux cxt Unit e2 x         = pure Unit
+substAux cxt Bottom e2 x       = pure Bottom
+substAux cxt (Absurd e) e2 x   = Absurd <$> substAux cxt e e2 x
+substAux cxt (e :*: e') e2 x   = (:*:) <$> substAux cxt e e2 x <*> substAux cxt e' e2 x
+substAux cxt (Pair e e') e2 x  = Pair <$> substAux cxt e' e2 x <*> substAux cxt e' e2 x
+substAux cxt (Fst e) e2 x      = Fst <$> substAux cxt e e2 x
+substAux cxt (Snd e) e2 x      = Snd <$> substAux cxt e e2 x
+substAux cxt (e :+: e') e2 x   = (:+:) <$> substAux cxt e e2 x <*> substAux cxt e' e2 x
+substAux cxt (Lef e) e2 x      = Lef <$> substAux cxt e e2 x
+substAux cxt (Righ e) e2 x     = Righ <$> substAux cxt e e2 x
+substAux cxt (Case e l r) e2 x = Case <$> substAux cxt e e2 x <*> substAux cxt l e2 x <*> substAux cxt r e2 x
+
+fresh :: (MonadState Int m) => Name -> m Name
+fresh prefixNum = do
+  n <- get
+  modify (+1)
+  return $ takeWhile isAlpha prefixNum `append` show n
