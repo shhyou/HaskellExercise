@@ -35,6 +35,12 @@ typ4 = Pi "A" U ("A" :=> "A")   :=>   Pi "A" U ("A" :=> "A")
 expr5 = Lam "x" "x" `Anno` polyid :@ U :@ (U :=> U)
 typ5 = U :=> U
 
+expr6 = Lam "x" $ Case "x"
+                    (Lam "_" Unit)
+                    (Lam "_" (Pair Unit Unit))
+typ6 = Pi "x" (Top :+: Top) $
+         Case "x" (Lam "_" Top) (Lam "_" (Top :*: Top))
+
 runM :: Monad m => ExceptT Err (StateT Int m) a -> m (Either Err a)
 runM m = evalStateT (runExceptT m) 100
 
