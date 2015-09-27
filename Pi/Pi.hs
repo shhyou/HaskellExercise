@@ -35,6 +35,7 @@ typ4 = Pi "A" U ("A" :=> "A")   :=>   Pi "A" U ("A" :=> "A")
 expr5 = Lam "x" "x" `Anno` polyid :@ U :@ (U :=> U)
 typ5 = U :=> U
 
+-- type error: requires dependenet sum-type
 expr6 = Lam "x" $ Case "x"
                     (Lam "_" Unit)
                     (Lam "_" (Pair Unit Unit))
