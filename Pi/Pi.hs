@@ -123,11 +123,33 @@ check' cxt (Lam x e) (Pi t a b) = do -- The case (\x. e) : Pi_[t : a] b
   -- Only do the evaluation had it type checked
   -- a' <- eval a
   check (extendCxt x' a cxt) e' b'
+check' cxt (Absurd e) t = do
+  check cxt t U
+  check cxt e Bottom
+check' cxt (Pair e1 e2) (a :*: b) = do
+  check cxt e1 a
+  check cxt e2 b
+check' cxt e@(Pair e1 e2) t = throwError $ "check: pair shall have type '_:*:_' : '" ++ show e ++ "' : '" ++ show t ++ "'"
+check' cxt (Lef e) (a :+: b) = do
+  check cxt a U
+  check cxt b U
+  check cxt e a
+check' cxt (Righ e) (a :+: b) = do
+  check cxt a U
+  check cxt b U
+  check cxt e b
+check' cxt e@(Case e1 e2 e3) t = do
+  t' <- eval =<< infer cxt e1
+  case t' of
+    a :+: b -> do
+      -- not sure if we shall include dependent version in the language as well
+      check cxt e2 (a :=> t)
+      check cxt e3 (b :=> t)
+    _ -> throwError $ "check: elimination of non-_:+:_ type '" ++ show e ++ "' : '" ++ show t ++ "'"
 check' cxt e t = do
   unless (inferable e) $ throwError $ "check: missing case: '" ++ show e ++ "' : '" ++ show t ++ "'"
-  t2 <- infer cxt e
-  equ <- equal <$> eval t <*> eval t2
-  unless equ $ throwError $ "check: type mismatch: " ++ show e ++ ": " ++ show t ++ " v.s. " ++ show t2
+  t2 <- eval =<< infer cxt e
+  unless (equal t t2) $ throwError $ "check: type mismatch: " ++ show e ++ ": " ++ show t ++ " v.s. " ++ show t2
 
 inferable :: Term -> Bool
 inferable (Var _) = True
@@ -136,12 +158,17 @@ inferable (Anno _ _) = True
 inferable (_ :=> _) = True
 inferable (Pi _ _ _) = True
 inferable U = True
+inferable Top = True
+inferable Unit = True
+inferable Bottom = True
+inferable (_ :*: _) = True
+inferable (_ :+: _) = True
 inferable _ = False
 
 infer :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
       => Context -> Term -> m Term
 infer cxt (Var x) = return $ lookupCxt x cxt
-infer cxt (e1 :@ e2) = do -- elimination of Pi_[t : a] b
+infer cxt (e1 :@ e2) = do
   t <- eval =<< infer cxt e1
   case t of
     a :=> b -> do
@@ -164,6 +191,31 @@ infer cxt (Pi t a b) = do
   check (extendCxt t a cxt) b U
   return U
 infer cxt U = return U
+infer cxt Top = return U
+infer cxt Unit = return Top
+infer cxt Bottom = return U
+infer cxt (a :*: b) = do
+  check cxt a U
+  check cxt b U
+  return U
+infer cxt (Pair e1 e2) = do
+  a <- infer cxt e1
+  b <- infer cxt e2
+  return (a :*: b)
+infer cxt (a :+: b) = do
+  check cxt a U
+  check cxt b U
+  return U
+infer cxt (Case e1 e2 e3) = do
+  a2t <- eval =<< infer cxt e2
+  b2t <- eval =<< infer cxt e3
+  case (a2t, b2t) of
+    (a :=> t1, b :=> t2) | equal t1 t2 -> do
+      check cxt e1 (a :+: b)
+      return t1
+    _ -> throwError $ "infer: elimination of _:+:_ does not match: '" ++
+                      show e2 ++ "' : '" ++ show a2t ++ "' and '" ++
+                      show e3 ++ "' : '" ++ show b2t ++ "'"
 infer cxt e = throwError $ "infer: missing case: '" ++ show e ++ "'"
 
 eval :: (Applicative m, MonadState Int m, MonadError Err m)
@@ -180,6 +232,31 @@ eval (Lam x e) = Lam x <$> eval e
 eval (e1 :=> e2) = (:=>) <$> eval e1 <*> eval e2
 eval (Pi x e1 e2) = Pi x <$> eval e1 <*> eval e2
 eval U = return U
+eval Top = return Top
+eval Unit = return Unit
+eval Bottom = return Bottom
+eval (Absurd e) = throwError $ "Absurd " ++ show e ++ " encountered"
+eval (e1 :*: e2) = (:*:) <$> eval e1 <*> eval e2
+eval (Pair a b) = Pair <$> eval a <*> eval b
+eval (Fst e) = do
+  e' <- eval e
+  case e' of
+    Pair a _ -> return a
+    _ -> return e'
+eval (Snd e) = do
+  e' <- eval e
+  case e' of
+    Pair _ b -> return b
+    _ -> return e'
+eval (e1 :+: e2) = (:+:) <$> eval e1 <*> eval e2
+eval (Lef e) = Lef <$> eval e
+eval (Righ e) = Righ <$> eval e
+eval (Case e1 e2 e3) = do
+  e1' <- eval e1
+  case e1' of
+    Lef v -> eval (e2 :@ v)
+    Righ v -> eval (e3 :@ v)
+    _ -> Case e1' <$> eval e2 <*> eval e3
 
 {- mechanical operation on terms: equality test, substitution -}
 
