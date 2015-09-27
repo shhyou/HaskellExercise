@@ -242,12 +242,12 @@ eval (Fst e) = do
   e' <- eval e
   case e' of
     Pair a _ -> return a
-    _ -> return e'
+    _ -> return (Fst e')
 eval (Snd e) = do
   e' <- eval e
   case e' of
     Pair _ b -> return b
-    _ -> return e'
+    _ -> return (Snd e')
 eval (e1 :+: e2) = (:+:) <$> eval e1 <*> eval e2
 eval (Lef e) = Lef <$> eval e
 eval (Righ e) = Righ <$> eval e
