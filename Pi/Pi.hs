@@ -58,15 +58,13 @@ infixl 2 :@
 infixr 1 :=>
 infix 0 `Anno`
 
-data Term = Var Name              -- infer
+data Term = Var Name
           | Term :@ Term
           | Anno Term Term        -- type annotaiton
+          | Lam Name Term
 
-          | Lam Name Term         -- check
-
-          | Pi Name Term Term     -- types
           | Term :=> Term         -- (Pi _ A B)
-
+          | Pi Name Term Term     -- types
           | U
 
           deriving (Show, Eq, Generic)
@@ -107,23 +105,20 @@ check' cxt (Lam x e) (Pi t a b) = do -- The case (\x. e) : Pi_[t : a] b
   -- Only do the evaluation had it type checked
   -- a' <- eval a
   check (extendCxt x' a cxt) e' b'
-check' cxt (a :=> b) U = do
-  check cxt a U
-  check cxt b U
-check' cxt (Pi t a b) U = do
-  check cxt a U
-  check (extendCxt t a cxt) b U
-check' cxt U U = return ()
 check' cxt e t = do
-  -- Any way to avoid this awkward check without duplicating the code?
-  case e of
-    Var _ -> return ()
-    _ :@ _ -> return ()
-    Anno _ _ -> return ()
-    _ -> throwError $ "check: missing case: '" ++ show e ++ "' : '" ++ show t ++ "'"
+  unless (inferable e) $ throwError $ "check: missing case: '" ++ show e ++ "' : '" ++ show t ++ "'"
   t2 <- infer cxt e
   equ <- equal <$> eval t <*> eval t2
   unless equ $ throwError $ "check: type mismatch: " ++ show e ++ ": " ++ show t ++ " v.s. " ++ show t2
+
+inferable :: Term -> Bool
+inferable (Var _) = True
+inferable (_ :@ _) = True
+inferable (Anno _ _) = True
+inferable (_ :=> _) = True
+inferable (Pi _ _ _) = True
+inferable U = True
+inferable _ = False
 
 infer :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
       => Context -> Term -> m Term
@@ -142,6 +137,15 @@ infer cxt (Anno e t) = do
   check cxt t U
   check cxt e t
   return t
+infer cxt (a :=> b) = do
+  check cxt a U
+  check cxt b U
+  return U
+infer cxt (Pi t a b) = do
+  check cxt a U
+  check (extendCxt t a cxt) b U
+  return U
+infer cxt U = return U
 infer cxt e = throwError $ "infer: missing case: '" ++ show e ++ "'"
 
 eval :: (Applicative m, MonadState Int m, MonadError Err m)
