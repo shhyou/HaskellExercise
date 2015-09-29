@@ -324,14 +324,17 @@ equalAux n cxt1 cxt2 (Pi x e1 e2) (Pi x' e1' e2') =
   equalAux n cxt1 cxt2 e1 e1' && equalAux (n+1) (extend cxt1 x n) (extend cxt2 x' n) e2 e2'
   where extend cxt x n z = if x == z then Right n else cxt z
 equalAux n cxt1 cxt2 U U = True
+equalAux n cxt1 cxt2 (Sigma x e1 e2) (Sigma x' e1' e2') =
+  equalAux n cxt1 cxt2 e1 e1' && equalAux (n+1) (extend cxt1 x n) (extend cxt2 x' n) e2 e2'
+  where extend cxt x n z = if x == z then Right n else cxt z
+equalAux n cxt1 cxt2 (Pair e1 e2) (Pair e1' e2') = equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
+equalAux n cxt1 cxt2 (Fst e) (Fst e') = equalAux n cxt1 cxt2 e e'
+equalAux n cxt1 cxt2 (Snd e) (Snd e') = equalAux n cxt1 cxt2 e e'
 equalAux n cxt1 cxt2 Top Top = True
 equalAux n cxt1 cxt2 Unit Unit = True
 equalAux n cxt1 cxt2 Bottom Bottom = True
 equalAux n cxt1 cxt2 (Absurd e) (Absurd e') = equalAux n cxt1 cxt2 e e'
 equalAux n cxt1 cxt2 (e1 :*: e2) (e1' :*: e2') = equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
-equalAux n cxt1 cxt2 (Pair e1 e2) (Pair e1' e2') = equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
-equalAux n cxt1 cxt2 (Fst e) (Fst e') = equalAux n cxt1 cxt2 e e'
-equalAux n cxt1 cxt2 (Snd e) (Snd e') = equalAux n cxt1 cxt2 e e'
 equalAux n cxt1 cxt2 (e1 :+: e2) (e1' :+: e2') = equalAux n cxt1 cxt2 e1 e1' && equalAux n cxt1 cxt2 e2 e2'
 equalAux n cxt1 cxt2 (Lef e) (Lef e') = equalAux n cxt1 cxt2 e e'
 equalAux n cxt1 cxt2 (Righ e) (Righ e') = equalAux n cxt1 cxt2 e e'
