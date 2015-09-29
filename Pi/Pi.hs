@@ -17,8 +17,11 @@ import Control.Monad.Except
 polyid :: Term
 polyid = expr1 `Anno` typ1
 
+traceCheck = False
+
 -- To pretty print: pp EXPR
-expr1, typ1, expr2, typ2, expr3, typ3, expr4, typ4, expr5, typ5, expr6, typ6, expr7, typ7 :: Term
+expr1, typ1, expr2, typ2, expr3, typ3, expr4, typ4, expr5, typ5,
+  expr6, typ6, expr7, typ7, expr8, typ8 :: Term
 
 expr1 = Lam "A" (Lam "x" "x")
 typ1 = Pi "A" U ("A" :=> "A")
@@ -42,13 +45,23 @@ expr6 = Lam "x" $ Case "x"
 typ6 = Pi "x" (Top :+: Top) $
          Case "x" (Lam "_" Top) (Lam "_" (Top :*: Top))
 
+-- simulating induction principle of non-dependent sum type by dependent sum type
+expr7 = Lam "x" $
+          Case "x"
+            (Lam "_". Pair (Lef Unit) $ Unit)
+            (Lam "_". Pair (Righ Unit) $ Pair Unit Unit)
+
+typ7 = Top:+:Top :=>
+        (Sigma "x'" (Top :+: Top) $
+          Case "x'" (Lam "_" Top) (Lam "_" (Top :*: Top)))
+
 -- dependent version of ((a,b) -> c) -> a -> b -> c
 -- Π[A : U] Π[B : A → U] Π[C : A → U]
 --   (Π[ p : Σ[x:A]B ] C (fst p)) → Π[x : A] B x → C x
-expr7 = Lam "A". Lam "B". Lam "C".
+expr8 = Lam "A". Lam "B". Lam "C".
           Lam "f". Lam "x". Lam "y"$
             "f":@(Pair "x" "y")
-typ7 = Pi "A" U. Pi "B" ("A" :=> U). Pi "C" ("A" :=> U) $
+typ8 = Pi "A" U. Pi "B" ("A" :=> U). Pi "C" ("A" :=> U) $
          (Pi "p" (Sigma "x" "A" ("B":@"x")) $
              "C" :@ Fst "p") :=>
          (Pi "x" "A" $
@@ -66,7 +79,7 @@ testCheck e t = do
 
 testAll = mapM_ (uncurry testCheck)
             [ (expr1,typ1),(expr2,typ2),(expr3,typ3),(expr4,typ4)
-            , (expr5,typ5),(expr6,typ6),(expr7,typ7)]
+            , (expr5,typ5),(expr6,typ6),(expr7,typ7),(expr8,typ8)]
 
 type Err = String
 type Name = String
@@ -128,7 +141,18 @@ lookupCxt = (maybe (error "Unbound variable") id .) . lookup
 
 check :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
       => Context -> Term -> Term -> m ()
-check cxt e t = check' cxt e =<< eval t
+check cxt e t = do
+  t' <- eval t
+  case (traceCheck , t') of
+    (False, _) -> return ()
+    (True, U) -> return ()
+    (True, _) ->
+      liftIO $ do
+        putStrLn "==================== check ===================="
+        pp cxt
+        pp e
+        pp t
+  check' cxt e t'
 
 check' :: (Applicative m, MonadState Int m, MonadError Err m, MonadIO m)
        => Context -> Term -> Term -> m ()
