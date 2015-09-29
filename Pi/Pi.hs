@@ -18,7 +18,7 @@ polyid :: Term
 polyid = expr1 `Anno` typ1
 
 -- To pretty print: pp EXPR
-expr1, typ1, expr2, typ2, expr3, typ3, expr4, typ4, expr5, typ5 :: Term
+expr1, typ1, expr2, typ2, expr3, typ3, expr4, typ4, expr5, typ5, expr6, typ6, expr7, typ7 :: Term
 
 expr1 = Lam "A" (Lam "x" "x")
 typ1 = Pi "A" U ("A" :=> "A")
@@ -42,6 +42,18 @@ expr6 = Lam "x" $ Case "x"
 typ6 = Pi "x" (Top :+: Top) $
          Case "x" (Lam "_" Top) (Lam "_" (Top :*: Top))
 
+-- dependent version of ((a,b) -> c) -> a -> b -> c
+-- Π[A : U] Π[B : A → U] Π[C : A → U]
+--   (Π[ p : Σ[x:A]B ] C (fst p)) → Π[x : A] B x → C x
+expr7 = Lam "A". Lam "B". Lam "C".
+          Lam "f". Lam "x". Lam "y"$
+            "f":@(Pair "x" "y")
+typ7 = Pi "A" U. Pi "B" ("A" :=> U). Pi "C" ("A" :=> U) $
+         (Pi "p" (Sigma "x" "A" ("B":@"x")) $
+             "C" :@ Fst "p") :=>
+         (Pi "x" "A" $
+             "B":@"x" :=> "C":@"x")
+
 runM :: Monad m => ExceptT Err (StateT Int m) a -> m (Either Err a)
 runM m = evalStateT (runExceptT m) 100
 
@@ -53,7 +65,8 @@ testCheck e t = do
     Left e -> putStrLn e
 
 testAll = mapM_ (uncurry testCheck)
-            [(expr1,typ1),(expr2,typ2),(expr3,typ3),(expr4,typ4),(expr5,typ5)]
+            [ (expr1,typ1),(expr2,typ2),(expr3,typ3),(expr4,typ4)
+            , (expr5,typ5),(expr6,typ6),(expr7,typ7)]
 
 type Err = String
 type Name = String
@@ -76,6 +89,11 @@ data Term = Var Name
           | Pi Name Term Term     -- types
           | U
 
+          | Sigma Name Term Term
+          | Pair Term Term
+          | Fst Term
+          | Snd Term
+
           | Top
           | Unit
 
@@ -83,9 +101,6 @@ data Term = Var Name
           | Absurd Term
 
           | Term :*: Term
-          | Pair Term Term
-          | Fst Term
-          | Snd Term
 
           | Term :+: Term
           | Lef Term
@@ -126,6 +141,7 @@ check' cxt (Lam x e) (Pi t a b) = do -- The case (\x. e) : Pi_[t : a] b
   e' <- subst e (Var x') x -- e [ x' / x ]
   b' <- subst b (Var x') t -- b [ x' / t ]
   check cxt a U
+  check (extendCxt x' a cxt) b' U
   -- Shouldn't affect type checking; merely to speed up type checking
   -- Only do the evaluation had it type checked
   -- a' <- eval a
@@ -133,10 +149,18 @@ check' cxt (Lam x e) (Pi t a b) = do -- The case (\x. e) : Pi_[t : a] b
 check' cxt (Absurd e) t = do
   check cxt t U
   check cxt e Bottom
+check' cxt (Pair e1 e2) (Sigma t a b) = do
+  check cxt a U
+  check (extendCxt t a cxt) b U
+  check cxt e1 a
+  b' <- subst b e1 t
+  check cxt e2 b'
 check' cxt (Pair e1 e2) (a :*: b) = do
+  check cxt a U
+  check cxt b U
   check cxt e1 a
   check cxt e2 b
-check' cxt e@(Pair e1 e2) t = throwError $ "check: pair shall have type '_:*:_' : '" ++ show e ++ "' : '" ++ show t ++ "'"
+check' cxt e@(Pair e1 e2) t = throwError $ "check: pair shall have type 'Sigma _ _ _' or '_:*:_' : '" ++ show e ++ "' : '" ++ show t ++ "'"
 check' cxt (Lef e) (a :+: b) = do
   check cxt a U
   check cxt b U
@@ -164,6 +188,9 @@ inferable (_ :@ _) = True
 inferable (Anno _ _) = True
 inferable (_ :=> _) = True
 inferable (Pi _ _ _) = True
+inferable (Sigma _ _ _) = True
+inferable (Fst _) = True
+inferable (Snd _) = True
 inferable U = True
 inferable Top = True
 inferable Unit = True
@@ -198,6 +225,20 @@ infer cxt (Pi t a b) = do
   check (extendCxt t a cxt) b U
   return U
 infer cxt U = return U
+infer cxt (Sigma t a b) = do
+  check cxt a U
+  check (extendCxt t a cxt) b U
+  return U
+infer cxt (Fst e) = do
+  t <- eval =<< infer cxt e
+  case t of
+    Sigma x a b -> return a
+    _ -> throwError $ "elimination of non-pair '" ++ show e ++ "': '" ++ show t ++ "'"
+infer cxt (Snd e) = do
+  t <- eval =<< infer cxt e
+  case t of
+    Sigma x a b -> subst b (Fst e) x
+    _ -> throwError $ "elimination of non-pair '" ++ show e ++ "': '" ++ show t ++ "'"
 infer cxt Top = return U
 infer cxt Unit = return Top
 infer cxt Bottom = return U
@@ -205,10 +246,6 @@ infer cxt (a :*: b) = do
   check cxt a U
   check cxt b U
   return U
-infer cxt (Pair e1 e2) = do
-  a <- infer cxt e1
-  b <- infer cxt e2
-  return (a :*: b)
 infer cxt (a :+: b) = do
   check cxt a U
   check cxt b U
@@ -239,11 +276,7 @@ eval (Lam x e) = Lam x <$> eval e
 eval (e1 :=> e2) = (:=>) <$> eval e1 <*> eval e2
 eval (Pi x e1 e2) = Pi x <$> eval e1 <*> eval e2
 eval U = return U
-eval Top = return Top
-eval Unit = return Unit
-eval Bottom = return Bottom
-eval (Absurd e) = throwError $ "Absurd " ++ show e ++ " encountered"
-eval (e1 :*: e2) = (:*:) <$> eval e1 <*> eval e2
+eval (Sigma x e1 e2) = Sigma x <$> eval e1 <*> eval e2
 eval (Pair a b) = Pair <$> eval a <*> eval b
 eval (Fst e) = do
   e' <- eval e
@@ -255,6 +288,11 @@ eval (Snd e) = do
   case e' of
     Pair _ b -> return b
     _ -> return (Snd e')
+eval Top = return Top
+eval Unit = return Unit
+eval Bottom = return Bottom
+eval (Absurd e) = throwError $ "Absurd " ++ show e ++ " encountered"
+eval (e1 :*: e2) = (:*:) <$> eval e1 <*> eval e2
 eval (e1 :+: e2) = (:+:) <$> eval e1 <*> eval e2
 eval (Lef e) = Lef <$> eval e
 eval (Righ e) = Righ <$> eval e
@@ -322,14 +360,19 @@ substAux cxt (Pi y e e') e2 x
       y' <- fresh y
       Pi y' <$> substAux cxt e e2 x <*> substAux (\z -> if z == y then y' else cxt z) e' e2 x
 substAux cxt U e2 x            = pure U
+substAux cxt (Sigma y e e') e2 x
+  | x == y                     = Sigma y <$> substAux cxt e e2 x <*> pure e'
+  | otherwise                  = do
+      y' <- fresh y
+      Sigma y' <$> substAux cxt e e2 x <*> substAux (\z -> if z == y then y' else cxt z) e' e2 x
+substAux cxt (Pair e e') e2 x  = Pair <$> substAux cxt e e2 x <*> substAux cxt e' e2 x
+substAux cxt (Fst e) e2 x      = Fst <$> substAux cxt e e2 x
+substAux cxt (Snd e) e2 x      = Snd <$> substAux cxt e e2 x
 substAux cxt Top e2 x          = pure Top
 substAux cxt Unit e2 x         = pure Unit
 substAux cxt Bottom e2 x       = pure Bottom
 substAux cxt (Absurd e) e2 x   = Absurd <$> substAux cxt e e2 x
 substAux cxt (e :*: e') e2 x   = (:*:) <$> substAux cxt e e2 x <*> substAux cxt e' e2 x
-substAux cxt (Pair e e') e2 x  = Pair <$> substAux cxt e' e2 x <*> substAux cxt e' e2 x
-substAux cxt (Fst e) e2 x      = Fst <$> substAux cxt e e2 x
-substAux cxt (Snd e) e2 x      = Snd <$> substAux cxt e e2 x
 substAux cxt (e :+: e') e2 x   = (:+:) <$> substAux cxt e e2 x <*> substAux cxt e' e2 x
 substAux cxt (Lef e) e2 x      = Lef <$> substAux cxt e e2 x
 substAux cxt (Righ e) e2 x     = Righ <$> substAux cxt e e2 x
