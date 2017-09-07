@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+.remark-slide-content {
+  font-size: 33px;
+}
+</style>
+</head>
+<body>
+  <textarea id="source">
+class: center, middle
+
+# Macro, `eval`, Metaprogramming!
+
+---
+
+# Syntactic Extension
+
+- `define-syntax` 定義 *transformer*, 會在 compile-time 展開
+
+- `begin-for-syntax`: 拿來寫 compile-time 的定義
+
+---
+
+# 操作 Syntax Objects
+
+- 包含 **lexical information**, 各式資料, source location, 自訂屬性
+
+- 有低階 API 操作
+
+- 高階 DSL: `syntax-parse` 和 `syntax`, `quasisyntax`, `unsyntax`
+
+---
+
+# Phase Separation
+
+- compile-time / run-time binding
+
+- visit / instantiation
+
+---
+
+# \#lang
+
+- 自定義一個 module 的各個 binding
+
+```racket
+(module 模組名稱 最初的（語言）binding
+  ...)
+```
+
+- 安裝成 package, 或用 `s-exp "some-file.rkt"` 當路徑
+
+- 各種 hook: `#%module-begin`, `#%app`, `#%datum`
+
+---
+
+# 各式 API
+
+- `current-read`, `current-print`
+
+- `dynamic-require`, `eval`, 命名空間, `current-module-name-resolver`
+
+- `current-compile`, `current-load/use-compiled`, `current-load`
+  </textarea>
+  <script src="js/remark.0.14.js"></script>
+  <script>
+    var slideshow = remark.create();
+  </script>
+</body>
+</html>
