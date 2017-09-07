@@ -1,5 +1,16 @@
 #lang racket
 
+(define *test-dynamic-require?* #t)
+
+; Turn this on to show all module name resolving queries
+(define *show-loading-queries?* #f)
+
+; Turn this on to see Racket registering attached modules.
+(define *start-from-base?* #f)
+
+; Uncomment this line to re-compile all modules.
+(define *recompile-all-modules?* #f)
+
 (define to-s
   (λ (d)
     (~a #:max-width 45 #:limit-prefix? #t #:limit-marker "..." d)))
@@ -31,9 +42,10 @@
          (printf "REGISTER ~a ~a\n" (to-s resolved-path) ns)
          (resolver resolved-path ns)]
         [(path relative-resolved-path stx perform-load?)
-         (printf "QUERY/LOAD ~a ~a ~a ~a\n"
-                 path (to-s relative-resolved-path)
-                 (to-s stx) perform-load?)
+         (when *show-loading-queries?*
+           (printf "QUERY/LOAD ~a ~a ~a ~a\n"
+                   path (to-s relative-resolved-path)
+                   (to-s stx) perform-load?))
          (resolver path relative-resolved-path stx perform-load?)]))
     new-resolver))
 
@@ -76,12 +88,25 @@
 (module+ main
   (require "dynrun.rkt")
 
+  (define compiled-paths
+    (cond [*recompile-all-modules?* '()]
+          [else (use-compiled-file-paths)]))
+
   (parameterize ([current-eval (make-eval)]
                  [current-module-name-resolver (make-resolver)]
                  [current-compile (make-compile)]
                  [current-load/use-compiled (make-load/use-compiled)]
                  [current-load (make-load)]
-                 #;[use-compiled-file-paths '()])
-    #;(run-dynamic-require)
-    (define m (read-module))
-    (eval-module m ''hello)))
+                 [use-compiled-file-paths compiled-paths])
+    (define ns
+      (cond [*start-from-base?* (make-base-namespace)]
+            [else (make-empty-namespace)]))
+    (cond
+      [*test-dynamic-require?*
+       (printf "Instantiating 'hello.rkt'\n")
+       (run-dynamic-require "hello.rkt" #f ns)]
+      [else
+       (printf "Reading module 'hello.rkt'  as  'hello\n")
+       (define m (read-module))
+       (printf "Evaluating the module 'hello\n")
+       (eval-module m ''hello ns)])))
