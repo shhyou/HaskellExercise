@@ -2,16 +2,19 @@
 
 (require syntax/modread)
 
-(provide (all-defined-out))
+(provide
+ read-module eval-module
+ run-dynamic-require)
 
+; read-module : string?  ->  syntax?
 (define read-module
-  (λ ()
-    (call-with-input-file "hello.rkt"
+  (λ (path)
+    (call-with-input-file path
       (λ (port)
-        (port-count-lines! port)
+        (port-count-lines! port) ; 計算行數而非從檔案開始的字元數
         (with-module-reading-parameterization
             (λ ()
-              (read-syntax "hello.rkt" port)))))))
+              (read-syntax path port)))))))
 
 (define eval-module
   (λ (mod name [ns (make-empty-namespace)])

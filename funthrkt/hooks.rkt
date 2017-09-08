@@ -24,7 +24,7 @@
         (printf "EVAL ")
         (cond
           [(compiled-module-expression? expr)
-           (printf "<compiled module ~a>\n" (module-compiled-name expr))]
+           (printf "<compiled module '~a>\n" (module-compiled-name expr))]
           [(or (compiled-expression? expr)
                (and (syntax? expr) (compiled-expression? (syntax-e expr))))
            (printf "<compiled expression>\n")]
@@ -103,10 +103,10 @@
             [else (make-empty-namespace)]))
     (cond
       [*test-dynamic-require?*
-       (printf "Instantiating 'hello.rkt'\n")
-       (run-dynamic-require "hello.rkt" #f ns)]
+       (printf "Instantiating 'hello-sexp.rkt'\n")
+       (run-dynamic-require "hello-sexp.rkt" #f ns)]
       [else
-       (printf "Reading module 'hello.rkt'  as  'hello\n")
-       (define m (read-module))
-       (printf "Evaluating the module 'hello\n")
-       (eval-module m ''hello ns)])))
+       (printf "Reading module 'hello-sexp.rkt'  as  'hello\n")
+       (define m (read-module "hello-sexp.rkt"))
+       (printf "Evaluating the module 'hello-sexp\n")
+       (eval-module m ''hello-sexp ns)])))
