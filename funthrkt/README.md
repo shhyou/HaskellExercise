@@ -130,28 +130,30 @@ Functional Thursday #55 程式碼
     `eval` 跟 `dynamic-require` 也不會讓人覺得意義不明.
 
 - `hooks.rkt`: 這個程式試圖 demo Racket 執行一個程式的全程. 從解析模組的
-               名字開始, 一路到從檔案系統載入模組(或載入 compiled byte code),
-               載入其 dependencies, 到最後編譯並執行模組然後註冊模組名字
-               為止, 這個程式在許多的 API 都會印出訊息.
-               [第 95 行](https://github.com/shhyou/HaskellExercise/blob/master/funthrkt/hooks.rkt#L95)
-               是插入印東西的函式的地方.
+    名字開始, 一路到從檔案系統載入模組(或載入 compiled byte code),
+    載入其 dependencies, 到最後編譯並執行模組然後註冊模組名字
+    為止, 這個程式在許多的 API 都會印出訊息.
+    [第 95 行](https://github.com/shhyou/HaskellExercise/blob/master/funthrkt/hooks.rkt#L95)
+    是插入印東西的函式的地方.
 
-               以 `current-compile` 為例, 這個參數控制了 Racket 當前用的 compiler
-               是誰. 像 [errortrace](https://docs.racket-lang.org/errortrace/using-errortrace.html)
-               等函式庫就會插入自己的 compiler 來對被編譯的 module 做標記, 插入追蹤
-               code 等等.
+    以 `current-compile` 為例, 這個參數控制了 Racket 當前用的 compiler
+    是誰. 像 [errortrace](https://docs.racket-lang.org/errortrace/using-errortrace.html)
+    等函式庫就會插入自己的 compiler 來對被編譯的 module 做標記, 插入追蹤
+    code 等等.
 
-               在測試中, 可以觀察 `funth-lang/` 下的程式有沒有編譯對執行
-               `hello.rkt` 有什麼影響:
+    在測試中, 可以觀察 `funth-lang/` 下的程式有沒有編譯對執行
+    `hello.rkt` 有什麼影響:
 
-               ```
-               $ cd funth-lang/
-               funth-lang/ $ raco pkg install
-               funth-lang/ $ cd ..
-               $ racket hooks.rkt
-               $ rm -rf funth-lang/compiled/
-               $ racket hooks.rkt
-               $ raco pkg remove funth-lang
-               ```
+    ```
+    $ cd funth-lang/
+    funth-lang/ $ raco pkg install
+    funth-lang/ $ cd ..
+    $ racket hooks.rkt
+    ... [blah] ...
+    $ rm -rf funth-lang/compiled/
+    $ racket hooks.rkt
+    ... [blah] ...
+    $ raco pkg remove funth-lang
+    ```
 
 (＊): 準確的說是 expansion-time
