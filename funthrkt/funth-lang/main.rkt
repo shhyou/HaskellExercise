@@ -26,11 +26,10 @@
   (λ (stx)
     (syntax-parse stx
       [(_ body:expr)
-       (define new-body
-         #'body #;(local-expand #'body 'module '()))
-       #`(#%module-begin
-          (printf "Evaluation the expression ~a\n" 'body)
-          #,new-body)]
+       (syntax
+        (#%module-begin
+         (printf "Evaluation the expression ~a\n" 'body)
+         body))]
       [_ (raise-syntax-error 'funth-lang "body must be exactly one expression" stx)])))
 
 
